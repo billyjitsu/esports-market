@@ -13,8 +13,7 @@ library AirnodeV2Attestation {
     /// @notice Recovers the address that signed a response
     /// @param requestHash Hash of the request that the response answers
     /// @param timestamp Unix time in seconds at which the Airnode signed the response
-    /// @param data Bytes that the Airnode signed. For a JSON response, this is its compact serialization
-    /// (JSON.stringify), such as {"price":2443.95}.
+    /// @param data Bytes of the `data` string that the Airnode signed, such as {"price":2443.95}
     /// @param signature 65-byte signature
     function recoverSigner(bytes32 requestHash, uint256 timestamp, bytes memory data, bytes memory signature)
         internal

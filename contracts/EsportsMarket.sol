@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {JSONParserLib} from "solady/utils/JSONParserLib.sol";
 import {LibString} from "solady/utils/LibString.sol";
 import {AirnodeV2Attestation} from "./AirnodeV2Attestation.sol";
 import {ProjectedJson} from "./ProjectedJson.sol";
@@ -14,8 +13,6 @@ import {ProjectedJson} from "./ProjectedJson.sol";
 /// @dev Each market accepts responses to one request: the `getMatch` operation for its match, projected to
 /// {"status","winnerId","teamA","teamB"}. `src/pandascore.ts` builds that request and derives its hash.
 contract EsportsMarket {
-    using JSONParserLib for JSONParserLib.Item;
-
     enum Status {
         None,
         Open,
@@ -170,7 +167,7 @@ contract EsportsMarket {
         if (!LibString.eq(matchStatus, "finished")) revert MatchNotOver(matchStatus);
 
         // PandaScore leaves winner_id null when a finished match has no winner.
-        if (JSONParserLib.parse(string(data)).at('"winnerId"').isNull()) {
+        if (ProjectedJson.isNull(data, "winnerId")) {
             voidMarket(marketId, "No winner");
             return;
         }

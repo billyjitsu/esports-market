@@ -41,7 +41,7 @@ would pay the whole pot to the losing side.
 | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
 | A contract that verifies an Airnode signature in its core workflow | [`EsportsMarket.settle`](contracts/EsportsMarket.sol): no signed result, no payout                                        |
 | Signer, request and time checks                                    | [The three checks](#the-three-checks)                                                                                     |
-| A way for judges to submit valid and invalid responses             | `pnpm tamper-test <market id>`, and the 18 contract tests                                                                 |
+| A way for judges to submit valid and invalid responses             | `pnpm tamper-test <market id>`, and the 18 market tests                                                                   |
 | Removing the integration breaks the use case                       | Without a signed result a market can only time out and refund                                                             |
 | Agent bonus: repeated autonomous cycles, x402, limits, failures    | [`pnpm agent`](#schedule-spending-limits-and-failure-handling) runs on a schedule, pays within limits, settles on its own |
 
@@ -303,37 +303,105 @@ sequenceDiagram
 ## Live on Base Sepolia
 
 `EsportsMarket` is deployed on Base Sepolia at
-[`0xa15Ff49ee654454783E4A3FF18EAD49ff99B175e`](https://sepolia.basescan.org/address/0xa15Ff49ee654454783E4A3FF18EAD49ff99B175e).
-Every transaction from the test run on 2026-10-25, in order. All 11 succeeded.
+[`0x5d7338D2eBC4Af20785D310f674559448a378b4D`](https://sepolia.basescan.org/address/0x5d7338D2eBC4Af20785D310f674559448a378b4D),
+built with the starter template's libraries as of 2026-10-23. Its source is verified on
+[Basescan](https://sepolia.basescan.org/address/0x5d7338D2eBC4Af20785D310f674559448a378b4D#code),
+[Sourcify](https://repo.sourcify.dev/84532/0x5d7338D2eBC4Af20785D310f674559448a378b4D) (exact match of the creation and
+runtime bytecode) and [Blockscout](https://base-sepolia.blockscout.com/address/0x5d7338D2eBC4Af20785D310f674559448a378b4D?tab=contract).
+Every transaction below succeeded.
 
-| #   | Step                                                                 | From                      | Gas       | Transaction                                                                                                                 |
-| --- | -------------------------------------------------------------------- | ------------------------- | --------- | --------------------------------------------------------------------------------------------------------------------------- |
-| 1   | Fund Alice with 0.02 ETH                                             | Deployer `0xcbC9…A448`    | 21,000    | [`0xa7721d34…c5d116`](https://sepolia.basescan.org/tx/0xa7721d340ac2f135ac8c0c4294c6e258826e8e1bf099867ae971ff6c1ac5d116)   |
-| 2   | Fund Bob with 0.02 ETH                                               | Deployer                  | 21,000    | [`0x9e9262c1…9035e5`](https://sepolia.basescan.org/tx/0x9e9262c118484febf32f47e7ae0cdbf05d6132fb82287011eef0c8d6629035e5)   |
-| 3   | Fund the agent with 0.01 ETH                                         | Deployer                  | 21,000    | [`0x98cb1ba2…934578`](https://sepolia.basescan.org/tx/0x98cb1ba20b5d549acfa2ee5283898e8f88cda6fbb03e246080ff7cae09934578)   |
-| 4   | Deploy `EsportsMarket`                                               | Deployer                  | 2,345,141 | [`0xc44cb3d5…bd080a`](https://sepolia.basescan.org/tx/0xc44cb3d5a01fdf7d0ac6aafba4435589e9f97c8267258b9a49de6ef079bd080a)   |
-| 5   | Mint 5 aUSD from the faucet (`pnpm payer --mint 5`)                  | Agent `0x4968…9B35`       | 85,068    | [`0xbee21a80…6e93de`](https://sepolia.basescan.org/tx/0xbee21a80ad2abc72f3cdadd97ca0960fff32e9acbe0d0c68379f098bbe6e93de)   |
-| 6   | Open market 1 on match 1200600, BST.A vs RED.A                       | Deployer                  | 116,626   | [`0x4fb1a779…271fd90`](https://sepolia.basescan.org/tx/0x4fb1a77980ce0e8ff9ed0ad0c3ac388ba1fd4e8ba50c748de2e534b84271fd90)  |
-| 7   | Alice stakes 0.004 ETH on BESTIA Academy                             | Alice `0x2167…ED89`       | 73,022    | [`0x93793038…9afbd0`](https://sepolia.basescan.org/tx/0x9379303891cb3c2b1fe3a1e978913f1057dd3250e5e5d655410f3a009b9afbd0)   |
-| 8   | Bob stakes 0.002 ETH on RED Canids Academy                           | Bob `0xbd7E…C764`         | 73,198    | [`0x100a6dd9…39a3cb`](https://sepolia.basescan.org/tx/0x100a6dd97dd9cbb60d2f1daaca5140dbbbac02a4b4756ff48f28fd40cd39a3cb)   |
-| 9   | The agent settles with the signed result: RED.A won, fee 0.00006 ETH | Agent                     | 174,471   | [`0xe4410765…faf4f47b`](https://sepolia.basescan.org/tx/0xe4410765e1dc88fb4dc44d246769f8bfd248f4013c15060e7f293e8dfaf4f47b) |
-| 10  | Bob claims 0.00594 ETH                                               | Bob                       | 64,262    | [`0x7b17f416…87dcf6`](https://sepolia.basescan.org/tx/0x7b17f416946eaef0cc4372dc6183f9634efe8db305fe6764ac3fcabac587dcf6)   |
-| 11  | The agent pays 0.01 aUSD over x402 (`pnpm x402-check`)               | Facilitator `0xd407…f1bf` | 98,458    | [`0x0c49fea2…ec68463`](https://sepolia.basescan.org/tx/0x0c49fea208f957736cc12a6a2025fbe17b2b06efee127d2a2a3747ac7ec68463)  |
+### Market 1: the demo
 
-- Steps 6 to 10 are one run of `pnpm demo --stake 0.002`. Between steps 8 and 9, the tamper test passed all five cases as
-  `eth_call`s, which leave no transaction.
-- In step 11 the sender is the x402.org facilitator, not the agent: the facilitator submitted the agent's signed
-  authorization and paid the gas, and 0.01 aUSD moved from the agent to the deployer.
+One run of `pnpm demo --stake 0.002` on 2026-10-25.
+
+| #   | Step                                                                 | From                      | Gas       | Transaction                                                                                                                  |
+| --- | -------------------------------------------------------------------- | ------------------------- | --------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Deploy `EsportsMarket`                                               | Deployer `0xcbC9…A448`    | 2,363,123 | [`0x3a55f197…cadf34`](https://sepolia.basescan.org/tx/0x3a55f197c922a881bef14cf5a1256eaa21fe0a3ed46081b318646daabfcadf34)    |
+| 2   | Open market 1 on match 1200600, BST.A vs RED.A                       | Deployer                  | 116,626   | [`0x8d655188…eaf5ad`](https://sepolia.basescan.org/tx/0x8d655188601f58e0aed6d08c4d44db824376987b8944b6ade5b965e3aceaf5ad)    |
+| 3   | Alice stakes 0.004 ETH on BESTIA Academy                             | Alice `0x2167…ED89`       | 73,022    | [`0x921f5b3b…9df0b8a9`](https://sepolia.basescan.org/tx/0x921f5b3bebe5c81fcc9e4bf416dbacfe6088b8b84f00d195e4b41c5a9df0b8a9)  |
+| 4   | Bob stakes 0.002 ETH on RED Canids Academy                           | Bob `0xbd7E…C764`         | 73,198    | [`0xd69f754c…eed894a7f`](https://sepolia.basescan.org/tx/0xd69f754ccb72eb25759d37d3e122147fcf632d386f7ab9755c00c8eeed894a7f) |
+| 5   | The agent settles with the signed result: RED.A won, fee 0.00006 ETH | Agent `0x4968…9B35`       | 175,350   | [`0x6ce3e580…f1ac146c6`](https://sepolia.basescan.org/tx/0x6ce3e5805567c6e059df471247d47f6d1fbf5b9f6f0a8c85240829637ac146c6) |
+| 6   | Bob claims 0.00594 ETH                                               | Bob                       | 64,262    | [`0xd7fa99a0…dd72cc38c`](https://sepolia.basescan.org/tx/0xd7fa99a010b84490f38d917475c59fadd72cc38c3487953c3275198f95acee2d) |
+| 7   | The agent pays 0.01 aUSD over x402 (`pnpm x402-check`)               | Facilitator `0xd407…f1bf` | 81,382    | [`0x0cdb6a74…161a2f5a`](https://sepolia.basescan.org/tx/0x0cdb6a746aa1e3c404d282e86fb18b41020ee188d6679699b2ed37da161a2f5a)  |
+
+- Between steps 4 and 5, the tamper test passed all five cases as `eth_call`s, which leave no transaction.
+- In step 7 the sender is the x402.org facilitator, not the agent: it submitted the agent's signed authorization and paid
+  the gas, and 0.01 aUSD moved from the agent to the deployer.
 - Alice backed the loser, so she had nothing to claim. The pot was 0.006 ETH: 0.00006 ETH to the agent, 0.00594 ETH to
   Bob, who held all the winning stake.
 
-| Account            | Address                                                                                                                         | Role                                                            |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
-| Deployer           | [`0xcbC97747Dc24DC3A2565f479644155a8d181A448`](https://sepolia.basescan.org/address/0xcbC97747Dc24DC3A2565f479644155a8d181A448) | Deployed the market, opened market 1, received the x402 payment |
-| Alice              | [`0x21675bB470fcD8C12400E88F0Bd9520d5428ED89`](https://sepolia.basescan.org/address/0x21675bB470fcD8C12400E88F0Bd9520d5428ED89) | Staker                                                          |
-| Bob                | [`0xbd7E39101CCD5a83b2FD2954a8E14A16947Dc764`](https://sepolia.basescan.org/address/0xbd7E39101CCD5a83b2FD2954a8E14A16947Dc764) | Staker                                                          |
-| Keeper agent       | [`0x49685eF8ed97f3E428e82c0Df67Cb88691519B35`](https://sepolia.basescan.org/address/0x49685eF8ed97f3E428e82c0Df67Cb88691519B35) | Settled market 1, paid over x402                                |
-| PandaScore Airnode | `0xd9D29FEDc3737aD5198611457fE04aB08a739C7b`                                                                                    | Signed the result. It never sends a transaction                 |
+### Markets 2 and 3: the agent buys its data over x402
+
+No AirnodeHub operation was priced yet, so `pnpm priced-airnode` stood in front of the real PandaScore Airnode and
+charged $0.01 per call. The agent ran against it with `PANDASCORE_AIRNODE_URL=http://127.0.0.1:4021/`. The signed results
+came from the real Airnode, so the contract checked the same signature as always.
+
+| Check                    | Run                                | What happened                                                                                                | Agent's aUSD |
+| ------------------------ | ---------------------------------- | ------------------------------------------------------------------------------------------------------------ | ------------ |
+| Per-call limit refuses   | Market 2, `X402_MAX_PAYMENT=0.005` | The client refused to pay $0.01 (`rejected by spendControls.maxAmountPerPayment`). Market stayed open        | $4.98        |
+| Agent pays, then settles | Market 2, defaults                 | Paid $0.01, received the signed result, settled market 2, earned the fee                                     | $4.97        |
+| Per-run budget refuses   | Market 3, `X402_BUDGET=0.005`      | The budget policy filtered out the price. Market stayed open                                                 | $4.97        |
+| Facilitator failure      | Market 3, defaults                 | The facilitator verified, then failed to settle (`invalid_exact_evm_transaction_failed`). No data, no charge | $4.97        |
+| Retry pays, then settles | Market 3, defaults                 | Paid $0.01, settled market 3                                                                                 | $4.96        |
+
+| Market | Step                                                  | From        | Transaction                                                                                                                  |
+| ------ | ----------------------------------------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| 2      | Open market 2 on match 1200600                        | Deployer    | [`0x2511b68e…03f59f809`](https://sepolia.basescan.org/tx/0x2511b68e83b1355cd6cfcf42d2e51fd12589a9f9517e2257fe9b09003f59f809) |
+| 2      | Alice stakes 0.002 ETH on BESTIA Academy              | Alice       | [`0xdc7aa2dc…6bd4bbbe`](https://sepolia.basescan.org/tx/0xdc7aa2dcb9bb3e2f61832e6be420f84099e54a442026687520e7cd5134c1324f)  |
+| 2      | Bob stakes 0.002 ETH on RED Canids Academy            | Bob         | [`0x969817b8…c6bd4bbbe`](https://sepolia.basescan.org/tx/0x969817b85cf005edcc69e385e35bb1f4de547931291f34d1bc44e6ec6bd4bbbe) |
+| 2      | The agent pays $0.01 for the result over x402         | Facilitator | [`0xf45bc523…bc7b66b2`](https://sepolia.basescan.org/tx/0xf45bc523904e8743774928775b68b655e39da2223e98dcec397f16c8bc7b66b2)  |
+| 2      | The agent settles with the result it bought           | Agent       | [`0x7c369843…6cba517`](https://sepolia.basescan.org/tx/0x7c369843c029660182e52a95cde744560010feccddb31eab1302d5cfd6cba517)   |
+| 2      | Bob claims 0.00396 ETH                                | Bob         | [`0xbe5be174…b5f2a9f`](https://sepolia.basescan.org/tx/0xbe5be17497546f217c6a45357948135e4d4b366bf36438d26cd1ed57bb5f2a9f)   |
+| 3      | Open market 3 on match 1200600                        | Deployer    | [`0x66ae336b…5ad0fcf3`](https://sepolia.basescan.org/tx/0x66ae336b08536f7e7a258d3702e9ae5b28f2ba3459643a10b7a891025ad0fcf3)  |
+| 3      | Bob stakes 0.001 ETH on RED Canids Academy            | Bob         | [`0x92983358…bbebfe0c`](https://sepolia.basescan.org/tx/0x92983358b0495d533d7f2d20bfe9376a9d828e1c0c63694c1fcd2dcbbbebfe0c)  |
+| 3      | Alice stakes 0.001 ETH on BESTIA Academy              | Alice       | [`0x56c235b0…b276143d6`](https://sepolia.basescan.org/tx/0x56c235b0ca1fbedc511a8f77f5782aef1dc90bec1cfd167185cd376b276143d6) |
+| 3      | The agent pays $0.01 for the result over x402 (retry) | Facilitator | [`0xab0d20a8…c7c0c71b`](https://sepolia.basescan.org/tx/0xab0d20a8ebbe1944da3e9ca9fd8d998eb4e04824797e930ea2df4530c7c0c71b)  |
+| 3      | The agent settles with the result it bought           | Agent       | [`0x67aba51b…409afe487`](https://sepolia.basescan.org/tx/0x67aba51bb100d55c83775016e4c6a3bfd4cffcd5e559f520604465c409afe487) |
+| 3      | Bob claims 0.00198 ETH                                | Bob         | [`0x908c1445…dd68a0a5a`](https://sepolia.basescan.org/tx/0x908c1445e79e5a11072ea3d656b0ba3dd68a0a5a4eb1668f0288343ed69b1590) |
+
+### Setup
+
+Before the first run, the deployer funded the other accounts, and the agent minted aUSD for x402 payments.
+
+| Step                                                | From     | Transaction                                                                                                               |
+| --------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Fund Alice with 0.02 ETH                            | Deployer | [`0xa7721d34…c5d116`](https://sepolia.basescan.org/tx/0xa7721d340ac2f135ac8c0c4294c6e258826e8e1bf099867ae971ff6c1ac5d116) |
+| Fund Bob with 0.02 ETH                              | Deployer | [`0x9e9262c1…9035e5`](https://sepolia.basescan.org/tx/0x9e9262c118484febf32f47e7ae0cdbf05d6132fb82287011eef0c8d6629035e5) |
+| Fund the agent with 0.01 ETH                        | Deployer | [`0x98cb1ba2…934578`](https://sepolia.basescan.org/tx/0x98cb1ba20b5d549acfa2ee5283898e8f88cda6fbb03e246080ff7cae09934578) |
+| Mint 5 aUSD from the faucet (`pnpm payer --mint 5`) | Agent    | [`0xbee21a80…6e93de`](https://sepolia.basescan.org/tx/0xbee21a80ad2abc72f3cdadd97ca0960fff32e9acbe0d0c68379f098bbe6e93de) |
+
+### Earlier deployment
+
+The first deployment,
+[`0xa15Ff49ee654454783E4A3FF18EAD49ff99B175e`](https://sepolia.basescan.org/address/0xa15Ff49ee654454783E4A3FF18EAD49ff99B175e),
+used the starter's libraries as of 2026-10-20, which read a null `winnerId` with Solady's parser directly instead of
+`ProjectedJson.isNull`. It behaves the same, is verified on the same three explorers, and ran the same demo. It is kept
+for the record; use the current address above.
+
+<details>
+<summary>Its transactions</summary>
+
+| Step                               | Transaction                                                                                                                 |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| Deploy                             | [`0xc44cb3d5…bd080a`](https://sepolia.basescan.org/tx/0xc44cb3d5a01fdf7d0ac6aafba4435589e9f97c8267258b9a49de6ef079bd080a)   |
+| Open market 1                      | [`0x4fb1a779…271fd90`](https://sepolia.basescan.org/tx/0x4fb1a77980ce0e8ff9ed0ad0c3ac388ba1fd4e8ba50c748de2e534b84271fd90)  |
+| Alice stakes 0.004 ETH             | [`0x93793038…9afbd0`](https://sepolia.basescan.org/tx/0x9379303891cb3c2b1fe3a1e978913f1057dd3250e5e5d655410f3a009b9afbd0)   |
+| Bob stakes 0.002 ETH               | [`0x100a6dd9…39a3cb`](https://sepolia.basescan.org/tx/0x100a6dd97dd9cbb60d2f1daaca5140dbbbac02a4b4756ff48f28fd40cd39a3cb)   |
+| The agent settles                  | [`0xe4410765…faf4f47b`](https://sepolia.basescan.org/tx/0xe4410765e1dc88fb4dc44d246769f8bfd248f4013c15060e7f293e8dfaf4f47b) |
+| Bob claims 0.00594 ETH             | [`0x7b17f416…87dcf6`](https://sepolia.basescan.org/tx/0x7b17f416946eaef0cc4372dc6183f9634efe8db305fe6764ac3fcabac587dcf6)   |
+| The agent pays 0.01 aUSD over x402 | [`0x0c49fea2…ec68463`](https://sepolia.basescan.org/tx/0x0c49fea208f957736cc12a6a2025fbe17b2b06efee127d2a2a3747ac7ec68463)  |
+
+</details>
+
+### Accounts
+
+| Account            | Address                                                                                                                         | Role                                                                |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| Deployer           | [`0xcbC97747Dc24DC3A2565f479644155a8d181A448`](https://sepolia.basescan.org/address/0xcbC97747Dc24DC3A2565f479644155a8d181A448) | Deployed the market, opened the markets, received the x402 payments |
+| Alice              | [`0x21675bB470fcD8C12400E88F0Bd9520d5428ED89`](https://sepolia.basescan.org/address/0x21675bB470fcD8C12400E88F0Bd9520d5428ED89) | Staker                                                              |
+| Bob                | [`0xbd7E39101CCD5a83b2FD2954a8E14A16947Dc764`](https://sepolia.basescan.org/address/0xbd7E39101CCD5a83b2FD2954a8E14A16947Dc764) | Staker                                                              |
+| Keeper agent       | [`0x49685eF8ed97f3E428e82c0Df67Cb88691519B35`](https://sepolia.basescan.org/address/0x49685eF8ed97f3E428e82c0Df67Cb88691519B35) | Settled markets 1 to 3, paid over x402                              |
+| PandaScore Airnode | `0xd9D29FEDc3737aD5198611457fE04aB08a739C7b`                                                                                    | Signed the result. It never sends a transaction                     |
 
 ## Prerequisites
 
@@ -366,7 +434,7 @@ libraries (forge-std, OpenZeppelin Contracts, Solady) into `lib/`.
 Check that everything works:
 
 ```sh
-forge test        # 18 contract tests
+forge test        # 88 contract tests: 18 for the market, 70 for the starter's libraries
 pnpm test         # 8 TypeScript tests
 ```
 
@@ -380,18 +448,19 @@ cp .env.example .env
 
 The example values work on a fresh local `anvil` chain as they are.
 
-| Variable               | Used by                   | What it is                                                                                                    |
-| ---------------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `RPC_URL`              | every script              | The chain to use. `http://127.0.0.1:8545` for anvil, `https://sepolia.base.org` for Base Sepolia              |
-| `PRIVATE_KEY`          | deploy, create-market     | Deploys the contract and opens markets. The default for every command without `--as`                          |
-| `ALICE_PRIVATE_KEY`    | `--as alice`, demo        | A staker                                                                                                      |
-| `BOB_PRIVATE_KEY`      | `--as bob`, demo          | A staker                                                                                                      |
-| `AGENT_PRIVATE_KEY`    | agent, `--as agent`, demo | The keeper agent. Earns settler fees and pays for priced Airnode calls                                        |
-| `MARKET_ADDRESS`       | every script              | The deployed `EsportsMarket`. The example is the first contract deployed on a fresh anvil                     |
-| `X402_ASSET`           | agent                     | The token the agent pays priced Airnode calls with: `aUSD` (default) or `USDC`                                |
-| `X402_MAX_PAYMENT`     | agent                     | The most the agent pays for one Airnode call, in dollars. Default `0.10`                                      |
-| `X402_BUDGET`          | agent                     | The most the agent pays for all calls in one run, in dollars. Default `1.00`                                  |
-| `BASE_SEPOLIA_RPC_URL` | payer                     | Base Sepolia RPC, where x402 payments happen, whatever chain `RPC_URL` is. Default `https://sepolia.base.org` |
+| Variable                 | Used by                   | What it is                                                                                                    |
+| ------------------------ | ------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `RPC_URL`                | every script              | The chain to use. `http://127.0.0.1:8545` for anvil, `https://sepolia.base.org` for Base Sepolia              |
+| `PRIVATE_KEY`            | deploy, create-market     | Deploys the contract and opens markets. The default for every command without `--as`                          |
+| `ALICE_PRIVATE_KEY`      | `--as alice`, demo        | A staker                                                                                                      |
+| `BOB_PRIVATE_KEY`        | `--as bob`, demo          | A staker                                                                                                      |
+| `AGENT_PRIVATE_KEY`      | agent, `--as agent`, demo | The keeper agent. Earns settler fees and pays for priced Airnode calls                                        |
+| `MARKET_ADDRESS`         | every script              | The deployed `EsportsMarket`. The example is the first contract deployed on a fresh anvil                     |
+| `X402_ASSET`             | agent                     | The token the agent pays priced Airnode calls with: `aUSD` (default) or `USDC`                                |
+| `X402_MAX_PAYMENT`       | agent                     | The most the agent pays for one Airnode call, in dollars. Default `0.10`                                      |
+| `X402_BUDGET`            | agent                     | The most the agent pays for all calls in one run, in dollars. Default `1.00`                                  |
+| `PANDASCORE_AIRNODE_URL` | agent, scripts            | Where PandaScore calls go. Default the real Airnode. Set `http://127.0.0.1:4021/` for `pnpm priced-airnode`   |
+| `BASE_SEPOLIA_RPC_URL`   | payer                     | Base Sepolia RPC, where x402 payments happen, whatever chain `RPC_URL` is. Default `https://sepolia.base.org` |
 
 `--as <name>` reads the key from `<NAME>_PRIVATE_KEY`, so you can add more people, such as `CAROL_PRIVATE_KEY` for
 `--as carol`.
@@ -478,6 +547,7 @@ Every command reads `.env`. Add `--as alice`, `--as bob` or `--as agent` to act 
 | `pnpm fetch-result <match id>`                        | Prints a match's signed result, as a contract receives it. Useful for saving test fixtures              |
 | `pnpm agent`                                          | Runs the keeper agent ([options](#the-keeper-agent))                                                    |
 | `pnpm demo [--stake <ETH>]`                           | Runs the whole flow. Bob stakes `--stake` ETH (default 1) and Alice twice that                          |
+| `pnpm priced-airnode [--price <dollars>]`             | Runs a local gateway that charges for PandaScore calls over x402, to rehearse the paid loop             |
 | `pnpm x402-check`                                     | Pays 0.01 in `X402_ASSET` through a real facilitator, to check payments before an Airnode charges       |
 
 `create-market` options:
@@ -591,11 +661,44 @@ x402 payer 0x90F79bf6EB2c4f870365E785982E1f101E93b906 on Base Sepolia
 ```
 
 > **Status:** no AirnodeHub operation was priced when this was written (checked 2026-10-25 on the PandaScore, Nodary,
-> The Odds API, AeroDataBox and USGS Airnodes: none lists a payment), so the agent's Airnode calls go through unpaid.
-> The payment path itself works: `pnpm x402-check` had the agent pay 0.01 aUSD through the `x402.org` facilitator,
-> which verified and settled it on Base Sepolia
-> ([transaction](https://sepolia.basescan.org/tx/0x0c49fea208f957736cc12a6a2025fbe17b2b06efee127d2a2a3747ac7ec68463)),
-> and the agent spent no ETH. When an Airnode prices an operation, the agent pays without any change.
+> The Odds API, AeroDataBox and USGS Airnodes: none lists a payment), so against the real Airnode the agent's calls go
+> through unpaid. The payment path is tested end to end on Base Sepolia: behind `pnpm priced-airnode`, the agent refused
+> prices over its limits, paid $0.01 in aUSD through the `x402.org` facilitator, received the real Airnode's signed
+> result and settled markets with it, and was not charged when settlement failed. See
+> [Markets 2 and 3](#markets-2-and-3-the-agent-buys-its-data-over-x402). When an Airnode prices an operation, the agent pays
+> without any change.
+
+### Rehearsing with a priced Airnode
+
+`pnpm priced-airnode` is a local gateway in front of the real PandaScore Airnode that charges for every call, the way a
+priced Airnode does. Point the agent at it to run the whole paid loop before any AirnodeHub operation charges:
+
+```sh
+pnpm priced-airnode --price 0.01                                  # terminal 1
+PANDASCORE_AIRNODE_URL=http://127.0.0.1:4021/ pnpm agent --once   # terminal 2
+```
+
+```
+[priced-airnode 17:52:03] payment from 0x4968…9B35 verified
+[priced-airnode 17:52:04] settled $0.01: https://sepolia.basescan.org/tx/0xf45bc523…
+[agent 17:52:04] paid $0.01 in aUSD (spent $0.01 of $1): https://sepolia.basescan.org/tx/0xf45bc523…
+[agent 17:52:05] market 2 (match 1200600): settled, team 135505 won, settler fee 0.00004 ETH, signed result {…}
+```
+
+For each call it answers 402 with the price in aUSD and USDC. With a payment, it has the facilitator verify it, forwards
+the call to the PandaScore Airnode, has the facilitator settle the payment, and returns the Airnode's response with the
+settlement in `PAYMENT-RESPONSE`. Like an Airnode, it does not charge for a call that fails upstream. It signs nothing:
+the result is the real Airnode's, so the contract accepts it unchanged.
+
+| Option                | Default                        | What it does                           |
+| --------------------- | ------------------------------ | -------------------------------------- |
+| `--price <dollars>`   | 0.01                           | Price per call                         |
+| `--port <port>`       | 4021                           | Port on 127.0.0.1                      |
+| `--to <address>`      | the `PRIVATE_KEY` account      | Who receives the payments              |
+| `--facilitator <url>` | `https://x402.org/facilitator` | Which facilitator verifies and settles |
+
+To show the spending limits, run the agent with `X402_MAX_PAYMENT=0.005` or `X402_BUDGET=0.005`: it refuses to pay and
+leaves the market open.
 
 ### Checking payments before an Airnode charges
 
@@ -633,8 +736,8 @@ On stage, when the agent runs:
 - If the operation is priced, the log shows `paid $0.01 in aUSD (spent $0.01 of $1)` with a Basescan link. Open it to
   show the transfer that the facilitator settled.
 - If it is still free, say so: the call goes through without a 402, and the same code pays when the Airnode starts
-  charging. Then run `pnpm x402-check` and open its Basescan link: the agent's payment, verified and settled by a real
-  facilitator.
+  charging. Then run the agent against `pnpm priced-airnode` and open the payment's Basescan link: the agent buying its data
+  and settling with it. `pnpm x402-check` alone shows a payment without a market.
 
 Points to make:
 
@@ -788,7 +891,17 @@ clock to each fixture's timestamp, so fixtures never go stale.
    pnpm demo --stake 0.002
    ```
 
-To verify the source on the explorer, add `--verify --etherscan-api-key <key>` to the deploy command.
+To verify the source, use Sourcify and Blockscout, which need no API key. The constructor argument is the PandaScore
+Airnode address:
+
+```sh
+ARGS=$(cast abi-encode "constructor(address)" 0xd9D29FEDc3737aD5198611457fE04aB08a739C7b)
+forge verify-contract <address> contracts/EsportsMarket.sol:EsportsMarket --chain base-sepolia \n  --verifier sourcify --constructor-args $ARGS --watch
+forge verify-contract <address> contracts/EsportsMarket.sol:EsportsMarket --chain base-sepolia \n  --verifier blockscout --verifier-url https://base-sepolia.blockscout.com/api/ --constructor-args $ARGS --watch
+```
+
+Basescan needs an Etherscan API key: add `--verifier etherscan --etherscan-api-key <key>` instead, or add
+`--verify --etherscan-api-key <key>` to the deploy command.
 
 **Keeping two chains.** `pnpm` scripts read `.env`, but variables already in the shell take precedence. So keep local
 settings in `.env`, Base Sepolia settings in `.env.base-sepolia` (git ignores every `.env.*` file except the example),
@@ -859,39 +972,42 @@ This is a hackathon demo. It has not been audited.
 
 ## Hackathon submission checklist
 
-| Item                                | Value                                                                                                                                           |
-| ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| Contract address and chain          | [`0xa15Ff49ee654454783E4A3FF18EAD49ff99B175e`](https://sepolia.basescan.org/address/0xa15Ff49ee654454783E4A3FF18EAD49ff99B175e) on Base Sepolia |
-| AirnodeHub listing                  | [PandaScore](https://airnodehub.api3.org/explore/pandascore)                                                                                    |
-| Airnode URL                         | `https://airnode-pandascore.fly.dev/`                                                                                                           |
-| Expected signer                     | `0xd9D29FEDc3737aD5198611457fE04aB08a739C7b`                                                                                                    |
-| Operation                           | `getMatch`, with `match_id_or_slug` set to the market's match                                                                                   |
-| Request configuration               | Projection `status`, `winnerId`, `teamA`, `teamB` ([The request](#the-request))                                                                 |
-| How judges submit their own results | `pnpm tamper-test <market id>`, or `cast send` to `settle` with their own data                                                                  |
-| Who relies on the data              | Every staker. A faked result would pay the pot to the losing side                                                                               |
-| Data we wanted but could not find   | [fill in before submitting]                                                                                                                     |
+| Item                                | Value                                                                                                                                                     |
+| ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Contract address and chain          | [`0x5d7338D2eBC4Af20785D310f674559448a378b4D`](https://sepolia.basescan.org/address/0x5d7338D2eBC4Af20785D310f674559448a378b4D) on Base Sepolia, verified |
+| AirnodeHub listing                  | [PandaScore](https://airnodehub.api3.org/explore/pandascore)                                                                                              |
+| Airnode URL                         | `https://airnode-pandascore.fly.dev/`                                                                                                                     |
+| Expected signer                     | `0xd9D29FEDc3737aD5198611457fE04aB08a739C7b`                                                                                                              |
+| Operation                           | `getMatch`, with `match_id_or_slug` set to the market's match                                                                                             |
+| Request configuration               | Projection `status`, `winnerId`, `teamA`, `teamB` ([The request](#the-request))                                                                           |
+| How judges submit their own results | `pnpm tamper-test <market id>`, or `cast send` to `settle` with their own data                                                                            |
+| Who relies on the data              | Every staker. A faked result would pay the pot to the losing side                                                                                         |
+| Data we wanted but could not find   | [fill in before submitting]                                                                                                                               |
 
 ## Project layout
 
-| Path                                                                       | What it is                                                                          |
-| -------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| [`contracts/EsportsMarket.sol`](contracts/EsportsMarket.sol)               | The market                                                                          |
-| [`contracts/AirnodeV2Attestation.sol`](contracts/AirnodeV2Attestation.sol) | From the starter template: verifies an Airnode signature                            |
-| [`contracts/ProjectedJson.sol`](contracts/ProjectedJson.sol)               | From the starter template: reads fields of the signed JSON by name                  |
-| [`script/DeployEsportsMarket.s.sol`](script/DeployEsportsMarket.s.sol)     | Deploys the market with the PandaScore Airnode's address                            |
-| [`test/EsportsMarket.t.sol`](test/EsportsMarket.t.sol)                     | Contract tests, including the tamper test                                           |
-| [`test/fixtures/`](test/fixtures)                                          | Real signed results                                                                 |
-| [`src/airnode-v2.ts`](src/airnode-v2.ts)                                   | From the starter template: request hashes, fetching and verifying signed responses  |
-| [`src/pandascore.ts`](src/pandascore.ts)                                   | The PandaScore Airnode's URL and address, the result request, and match listings    |
-| [`src/market.ts`](src/market.ts)                                           | Contract ABI, clients, and helpers shared by the scripts                            |
-| [`src/keeper.ts`](src/keeper.ts)                                           | Fetches a result and settles a market                                               |
-| [`src/agent.ts`](src/agent.ts)                                             | The keeper agent                                                                    |
-| [`src/x402.ts`](src/x402.ts)                                               | Pays for priced Airnode calls with the official `@x402/fetch` client, within limits |
-| [`src/payer.ts`](src/payer.ts)                                             | The x402 payer's balances on Base Sepolia, and minting aUSD from the faucet         |
-| [`src/x402-check.ts`](src/x402-check.ts)                                   | Checks the agent's x402 payments with a real facilitator before an Airnode charges  |
-| [`src/tamper.ts`](src/tamper.ts)                                           | The tamper test against a deployed market                                           |
-| [`src/demo.ts`](src/demo.ts)                                               | The whole flow in one run                                                           |
-| `src/*.ts` (other files)                                                   | One file per command                                                                |
+| Path                                                                                                                                                                     | What it is                                                                          |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------- |
+| [`contracts/EsportsMarket.sol`](contracts/EsportsMarket.sol)                                                                                                             | The market                                                                          |
+| [`contracts/AirnodeV2Attestation.sol`](contracts/AirnodeV2Attestation.sol)                                                                                               | From the starter template: verifies an Airnode signature                            |
+| [`contracts/ProjectedJson.sol`](contracts/ProjectedJson.sol)                                                                                                             | From the starter template: reads fields of the signed JSON by name, and null checks |
+| [`contracts/IsoTimestamp.sol`](contracts/IsoTimestamp.sol)                                                                                                               | From the starter template: reads ISO 8601 dates for `ProjectedJson`                 |
+| [`test/AirnodeV2Attestation.t.sol`](test/AirnodeV2Attestation.t.sol), [`ProjectedJson.t.sol`](test/ProjectedJson.t.sol), [`IsoTimestamp.t.sol`](test/IsoTimestamp.t.sol) | From the starter template: tests for its libraries                                  |
+| [`script/DeployEsportsMarket.s.sol`](script/DeployEsportsMarket.s.sol)                                                                                                   | Deploys the market with the PandaScore Airnode's address                            |
+| [`test/EsportsMarket.t.sol`](test/EsportsMarket.t.sol)                                                                                                                   | Contract tests, including the tamper test                                           |
+| [`test/fixtures/`](test/fixtures)                                                                                                                                        | Real signed results                                                                 |
+| [`src/airnode-v2.ts`](src/airnode-v2.ts)                                                                                                                                 | From the starter template: request hashes, fetching and verifying signed responses  |
+| [`src/pandascore.ts`](src/pandascore.ts)                                                                                                                                 | The PandaScore Airnode's URL and address, the result request, and match listings    |
+| [`src/market.ts`](src/market.ts)                                                                                                                                         | Contract ABI, clients, and helpers shared by the scripts                            |
+| [`src/keeper.ts`](src/keeper.ts)                                                                                                                                         | Fetches a result and settles a market                                               |
+| [`src/agent.ts`](src/agent.ts)                                                                                                                                           | The keeper agent                                                                    |
+| [`src/x402.ts`](src/x402.ts)                                                                                                                                             | Pays for priced Airnode calls with the official `@x402/fetch` client, within limits |
+| [`src/payer.ts`](src/payer.ts)                                                                                                                                           | The x402 payer's balances on Base Sepolia, and minting aUSD from the faucet         |
+| [`src/priced-airnode.ts`](src/priced-airnode.ts)                                                                                                                         | A local gateway that charges for PandaScore calls over x402, for rehearsals         |
+| [`src/x402-check.ts`](src/x402-check.ts)                                                                                                                                 | Checks the agent's x402 payments with a real facilitator before an Airnode charges  |
+| [`src/tamper.ts`](src/tamper.ts)                                                                                                                                         | The tamper test against a deployed market                                           |
+| [`src/demo.ts`](src/demo.ts)                                                                                                                                             | The whole flow in one run                                                           |
+| `src/*.ts` (other files)                                                                                                                                                 | One file per command                                                                |
 
 ## Credits and license
 

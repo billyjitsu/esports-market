@@ -19,6 +19,7 @@
     "payer": "node --env-file-if-exists=.env src/payer.ts",
     "prettier:check": "prettier --check .",
     "prettier:fix": "prettier --write .",
+    "priced-airnode": "node --env-file-if-exists=.env src/priced-airnode.ts",
     "settle": "node --env-file-if-exists=.env src/settle.ts",
     "stake": "node --env-file-if-exists=.env src/stake.ts",
     "tamper-test": "node --env-file-if-exists=.env src/tamper-test.ts",

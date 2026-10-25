@@ -1,7 +1,11 @@
 import type { Address } from 'viem';
 import type { AirnodeV2Request } from './airnode-v2.ts';
 
-export const PANDASCORE_AIRNODE_URL = 'https://airnode-pandascore.fly.dev/';
+export const PANDASCORE_AIRNODE_DIRECT_URL = 'https://airnode-pandascore.fly.dev/';
+
+// Where calls go. PANDASCORE_AIRNODE_URL can point at `pnpm priced-airnode` to rehearse paying over x402. The signer
+// check below does not change, so whatever answers must pass on the real Airnode's signed responses.
+export const PANDASCORE_AIRNODE_URL = process.env.PANDASCORE_AIRNODE_URL ?? PANDASCORE_AIRNODE_DIRECT_URL;
 
 // The address that the PandaScore Airnode signs with, from the x-airnode extension of the document at its URL.
 export const PANDASCORE_AIRNODE_ADDRESS: Address = '0xd9D29FEDc3737aD5198611457fE04aB08a739C7b';

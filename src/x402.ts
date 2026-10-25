@@ -8,7 +8,7 @@ import { privateKeyToAccount } from 'viem/accounts';
 // an agent that runs on its own: a most per call and a most per run.
 
 // Base Sepolia, a testnet, where the Airnodes take payment, so a priced call costs nothing real.
-export const BASE_SEPOLIA = 'eip155:84532';
+export const BASE_SEPOLIA = 'eip155:84532' as const;
 
 // The Airnodes accept both and charge the same amount in each. USDC comes from https://faucet.circle.com, and AirnodeHub
 // USD (aUSD) from https://api3dao.github.io/airnodehub-hackathon/faucet/. Both have 6 decimals.

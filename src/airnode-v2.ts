@@ -8,6 +8,22 @@ export interface AirnodeV2Request {
   responseProjection?: Record<string, string>;
 }
 
+// The same request through the passthrough: the provider's own method, path, query and body, sent under /api.
+export interface AirnodeV2PassthroughRequest {
+  method: 'GET' | 'POST';
+  // The hash covers the path as sent, so encode each value in it with encodeURIComponent, as AirnodeHub does.
+  path: string;
+  // The hash covers the query in the order sent.
+  query: [name: string, value: string][];
+  // Only the header parameters that the Airnode declares, such as x-chain on Birdeye. The hash covers them.
+  headers: [name: string, value: string][];
+  // The hash covers the body byte for byte. Empty for a GET.
+  body: string;
+  responseProjection?: Record<string, string>;
+}
+
+export type AirnodeV2Route = 'post' | 'passthrough';
+
 // A signed response with `data` as the exact string that the Airnode signed. A contract receives it as bytes.
 export interface SignedResponse {
   airnode: Address;
@@ -17,15 +33,18 @@ export interface SignedResponse {
   signature: Hex;
 }
 
-// The body that an Airnode answers a POST with, where `data` is the parsed JSON.
+// The body that an Airnode answers a POST with. An older Airnode sends `data` as parsed JSON rather than a string.
 type AirnodeV2Response = Omit<SignedResponse, 'data'> & { data: unknown };
 
-// Sorts object keys the way the Airnode does, with localeCompare, so the same request always has the same hash.
+// The order in which the Airnode and Solidity compare strings: UTF-8 byte order, which is code point order.
+const compareUtf8 = (a: string, b: string) => Buffer.compare(Buffer.from(a), Buffer.from(b));
+
+// Sorts object keys so that the same request always has the same hash.
 const canonicalize = (value: unknown): unknown => {
   if (Array.isArray(value)) return value.map(canonicalize);
   if (value === null || typeof value !== 'object') return value;
   return Object.entries(value)
-    .toSorted(([a], [b]) => a.localeCompare(b))
+    .toSorted(([a], [b]) => compareUtf8(a, b))
     .map(([key, nested]) => [key, canonicalize(nested)]);
 };
 
@@ -36,8 +55,26 @@ export const deriveRequestHash = ({ operation, parameters, responseProjection }:
   return keccak256(toHex(JSON.stringify(hashedRequest)));
 };
 
-// `fetchFunction` lets a caller that pays for priced operations, such as the keeper agent, swap in a fetch that answers
-// a 402 with an x402 payment.
+// Header names ignore case and their order means nothing, so the Airnode lower-cases and sorts them. The query keeps its
+// order, since the upstream receives it in that order.
+export const derivePassthroughRequestHash = ({
+  method,
+  path,
+  query,
+  headers,
+  body,
+  responseProjection,
+}: AirnodeV2PassthroughRequest): Hex => {
+  const sortedHeaders = headers
+    .map(([name, value]): [string, string] => [name.toLowerCase(), value])
+    .toSorted(([a], [b]) => compareUtf8(a, b));
+  const request = ['passthrough', method, path, query, sortedHeaders, body];
+  const hashedRequest = responseProjection ? [...request, canonicalize(responseProjection)] : request;
+  return keccak256(toHex(JSON.stringify(hashedRequest)));
+};
+
+// Both fetch functions take the fetch to call the Airnode with. Pass one from createPayingFetch in x402.ts to pay for a
+// priced operation.
 export const fetchSignedResponse = async (
   airnodeUrl: string,
   request: AirnodeV2Request,
@@ -51,9 +88,51 @@ export const fetchSignedResponse = async (
   if (!response.ok) throw new Error(`The Airnode responded with ${response.status}: ${await response.text()}`);
 
   const { airnode, requestHash, timestamp, data, signature } = (await response.json()) as AirnodeV2Response;
-  // The Airnode signs JSON data as JSON.stringify writes it, and JSON.parse keeps the key order, so this gives back the
-  // signed bytes exactly.
+  // The Airnode sends `data` as the string that it signed. An older Airnode signed JSON data as JSON.stringify writes it,
+  // and JSON.parse keeps the key order, so this gives back those signed bytes exactly.
   return { airnode, requestHash, timestamp, data: typeof data === 'string' ? data : JSON.stringify(data), signature };
+};
+
+const buildPassthroughUrl = (
+  airnodeUrl: string,
+  { path, query, responseProjection = {} }: AirnodeV2PassthroughRequest
+) => {
+  const projectedFields = Object.entries(responseProjection).map(([field, pointer]) => [
+    'x-airnode-project',
+    `${field}:${pointer}`,
+  ]);
+  const url = new URL(`api${path}`, airnodeUrl);
+  url.search = new URLSearchParams([...query, ...projectedFields]).toString();
+  return url;
+};
+
+export const fetchSignedPassthroughResponse = async (
+  airnodeUrl: string,
+  request: AirnodeV2PassthroughRequest,
+  fetchFunction: typeof fetch = fetch
+): Promise<SignedResponse> => {
+  const hasBody = request.body !== '';
+  const response = await fetchFunction(buildPassthroughUrl(airnodeUrl, request), {
+    method: request.method,
+    // The hash leaves out Content-Type, so it is not one of the request's headers.
+    headers: hasBody ? [...request.headers, ['Content-Type', 'application/json']] : request.headers,
+    body: hasBody ? request.body : undefined,
+  });
+  if (!response.ok) throw new Error(`The Airnode responded with ${response.status}: ${await response.text()}`);
+
+  const readHeader = (name: string) => {
+    const value = response.headers.get(name);
+    if (!value) throw new Error(`The response has no ${name} header, so it is not signed`);
+    return value;
+  };
+  return {
+    airnode: readHeader('X-Airnode-Address') as Address,
+    requestHash: readHeader('X-Airnode-Request-Hash') as Hex,
+    timestamp: readHeader('X-Airnode-Timestamp'),
+    // The body is the data, and the signature covers it as received.
+    data: await response.text(),
+    signature: readHeader('X-Airnode-Signature') as Hex,
+  };
 };
 
 export const recoverSigner = ({ requestHash, timestamp, data, signature }: SignedResponse): Promise<Address> =>
