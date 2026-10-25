@@ -1,0 +1,11 @@
+# Foundry
+/out
+/cache
+/broadcast
+
+# Node
+node_modules
+
+.env
+.env.*
+!.env.example

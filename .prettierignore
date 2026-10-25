@@ -1,0 +1,6 @@
+/lib
+/out
+/cache
+/broadcast
+foundry.lock
+pnpm-lock.yaml

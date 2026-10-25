@@ -1,0 +1,7 @@
+{
+  "airnode": "0xd9D29FEDc3737aD5198611457fE04aB08a739C7b",
+  "requestHash": "0xb24a083b6fde8845619a83d19e0450c38c6ea36af9e9e3421adc21acb695b025",
+  "timestamp": "1792528350",
+  "data": "{\"status\":\"finished\",\"winnerId\":138986,\"teamA\":138986,\"teamB\":139349}",
+  "signature": "0x81bfe95192f378df21199d2599020eb14f8744b90ae028b15ef75c92a8815ff24e110aa4196721398663b22e49e156f9774b48df99c0837d98460d6faa5231241c"
+}

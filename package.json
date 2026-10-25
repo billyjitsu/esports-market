@@ -1,0 +1,40 @@
+{
+  "name": "esports-market",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Esports prediction market that settles on PandaScore results signed by an AirnodeHub Airnode, with a keeper agent",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "agent": "node --env-file-if-exists=.env src/agent.ts",
+    "claim": "node --env-file-if-exists=.env src/claim.ts",
+    "create-market": "node --env-file-if-exists=.env src/create-market.ts",
+    "demo": "node --env-file-if-exists=.env src/demo.ts",
+    "fetch-result": "node src/fetch-result.ts",
+    "find-matches": "node src/find-matches.ts",
+    "markets": "node --env-file-if-exists=.env src/markets.ts",
+    "payer": "node --env-file-if-exists=.env src/payer.ts",
+    "prettier:check": "prettier --check .",
+    "prettier:fix": "prettier --write .",
+    "settle": "node --env-file-if-exists=.env src/settle.ts",
+    "stake": "node --env-file-if-exists=.env src/stake.ts",
+    "tamper-test": "node --env-file-if-exists=.env src/tamper-test.ts",
+    "test": "node --test \"src/**/*.test.ts\"",
+    "tsc": "tsc",
+    "x402-check": "node --env-file-if-exists=.env src/x402-check.ts"
+  },
+  "dependencies": {
+    "@x402/core": "2.28.0",
+    "@x402/evm": "2.28.0",
+    "@x402/fetch": "2.28.0",
+    "viem": "^2.57.3"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.1",
+    "prettier": "^3.9.9",
+    "typescript": "~6.0.3"
+  }
+}
