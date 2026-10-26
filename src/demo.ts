@@ -78,8 +78,11 @@ for (const [client, team, amount] of [
   console.log(`${client.account.address} staked ${formatEther(amount)} ETH on ${team}`);
 }
 
-step(`4. Wait for staking to close (${closesInSeconds}s)`);
-while (Date.now() / 1000 <= Number(closesAt) + 1) await sleep(1000);
+// The Airnode stamps its responses with its own clock, and a response signed before closesAt cannot settle, so wait a
+// few seconds past closesAt in case this computer's clock runs ahead of the Airnode's.
+const clockMarginSeconds = 10;
+step(`4. Wait for staking to close (${closesInSeconds + clockMarginSeconds}s)`);
+while (Date.now() / 1000 <= Number(closesAt) + clockMarginSeconds) await sleep(1000);
 // A new block, so the chain's time moves past closesAt too
 await creator.request({ method: 'evm_mine' as never, params: [] as never }).catch(() => undefined);
 

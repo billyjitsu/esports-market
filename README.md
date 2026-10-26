@@ -496,7 +496,7 @@ Market 1, request hash 0xec1bafc6…, staking closes 2026-10-20T20:38:00.000Z
 
 == 3. Alice stakes 2 ETH on team A, Bob stakes 1 ETH on team B
 
-== 4. Wait for staking to close (20s)
+== 4. Wait for staking to close (30s)
 
 == 5. Tamper test: what the judges run
 PASS  Valid result from the PandaScore Airnode         accepted

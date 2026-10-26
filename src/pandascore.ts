@@ -61,14 +61,15 @@ const summarize = (match: PandaScoreMatch): MatchSummary => ({
 
 // Reads match details for people and agents to choose from. Nothing here goes on-chain, so the signature that comes
 // with these responses is not checked. All teams share the upstream quota, so keep `perPage` small and cache results.
-const callUnsigned = async (operation: string, parameters: Record<string, unknown>) => {
+// The Airnode sends `data` as the text that it signed, PandaScore's JSON body here, so it is parsed before use.
+const callUnsigned = async (operation: string, parameters: Record<string, unknown>): Promise<unknown> => {
   const response = await fetch(PANDASCORE_AIRNODE_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ operation, parameters }),
   });
   if (!response.ok) throw new Error(`The Airnode responded with ${response.status}: ${await response.text()}`);
-  return ((await response.json()) as { data: unknown }).data;
+  return JSON.parse(((await response.json()) as { data: string }).data);
 };
 
 export const listMatches = async (when: 'upcoming' | 'past' | 'running', perPage = 10): Promise<MatchSummary[]> => {

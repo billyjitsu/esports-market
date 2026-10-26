@@ -15,7 +15,7 @@ export interface AirnodeV2PassthroughRequest {
   path: string;
   // The hash covers the query in the order sent.
   query: [name: string, value: string][];
-  // Only the header parameters that the Airnode declares, such as x-chain on Birdeye. The hash covers them.
+  // Only the header parameters that the Airnode declares, such as eBay's X-EBAY-C-MARKETPLACE-ID. The hash covers them.
   headers: [name: string, value: string][];
   // The hash covers the body byte for byte. Empty for a GET.
   body: string;
@@ -32,9 +32,6 @@ export interface SignedResponse {
   data: string;
   signature: Hex;
 }
-
-// The body that an Airnode answers a POST with. An older Airnode sends `data` as parsed JSON rather than a string.
-type AirnodeV2Response = Omit<SignedResponse, 'data'> & { data: unknown };
 
 // The order in which the Airnode and Solidity compare strings: UTF-8 byte order, which is code point order.
 const compareUtf8 = (a: string, b: string) => Buffer.compare(Buffer.from(a), Buffer.from(b));
@@ -87,10 +84,7 @@ export const fetchSignedResponse = async (
   });
   if (!response.ok) throw new Error(`The Airnode responded with ${response.status}: ${await response.text()}`);
 
-  const { airnode, requestHash, timestamp, data, signature } = (await response.json()) as AirnodeV2Response;
-  // The Airnode sends `data` as the string that it signed. An older Airnode signed JSON data as JSON.stringify writes it,
-  // and JSON.parse keeps the key order, so this gives back those signed bytes exactly.
-  return { airnode, requestHash, timestamp, data: typeof data === 'string' ? data : JSON.stringify(data), signature };
+  return (await response.json()) as SignedResponse;
 };
 
 const buildPassthroughUrl = (
