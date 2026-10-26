@@ -982,7 +982,7 @@ This is a hackathon demo. It has not been audited.
 | Request configuration               | Projection `status`, `winnerId`, `teamA`, `teamB` ([The request](#the-request))                                                                           |
 | How judges submit their own results | `pnpm tamper-test <market id>`, or `cast send` to `settle` with their own data                                                                            |
 | Who relies on the data              | Every staker. A faked result would pay the pot to the losing side                                                                                         |
-| Data we wanted but could not find   | [fill in before submitting]                                                                                                                               |
+| Data we wanted but could not find   | Teams: tell us here what data you looked for on AirnodeHub and didn't find                                                                                |
 
 ## Project layout
 
