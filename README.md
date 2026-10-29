@@ -4,7 +4,7 @@ An esports prediction market built on [AirnodeHub](https://airnodehub.api3.org).
 and anyone settles the market with a match result that the
 [PandaScore](https://airnodehub.api3.org/explore/pandascore) Airnode signed. The contract checks the signature, the
 request and the time itself, so it never has to trust whoever brings the result. A keeper agent does that job for a 1%
-settler fee, and pays for the data over x402 when the operation is priced.
+settler fee, and buys the data over x402: every PandaScore call costs $0.01 in AirnodeHub USD (aUSD) on Base Sepolia.
 
 It is a worked example for the [AirnodeHub hackathon](https://api3dao.github.io/airnodehub-hackathon/), built on the
 hackathon's starter template.
@@ -57,7 +57,7 @@ sequenceDiagram
     Users->>Market: createMarket(requestHash, matchId, teams, closesAt, deadline)
     Users->>Market: stake(marketId, team) with ETH
     Note over Users,Airnode: The match is played
-    Agent->>Airnode: POST getMatch (pays over x402 if priced)
+    Agent->>Airnode: POST getMatch, paid $0.01 over x402
     Airnode-->>Agent: timestamp, data, signature
     Agent->>Market: settle(marketId, timestamp, data, signature)
     Note over Market: Verify signer and request, check time,<br/>read "finished" and the winner, pay settler fee
@@ -153,7 +153,7 @@ flowchart LR
     subgraph BaseSepolia["Base Sepolia"]
         MK["EsportsMarket<br/>holds the stakes"]
         LIB["AirnodeV2Attestation<br/>ProjectedJson"]
-        TOK["aUSD / USDC"]
+        TOK["aUSD"]
     end
     U(("Users")) --> CLI
     CLI -- "createMarket, stake, claim" --> MK
@@ -261,7 +261,7 @@ flowchart TD
 
 ### An x402 payment
 
-What happens when an Airnode prices `getMatch`. `pnpm x402-check` runs the same handshake against a real facilitator.
+What happens on every PandaScore call. [Market 4](#market-4-paying-the-real-airnode) shows it on Base Sepolia.
 
 ```mermaid
 sequenceDiagram
@@ -271,8 +271,8 @@ sequenceDiagram
     participant Fac as x402 facilitator
     participant Token as aUSD on Base Sepolia
     Agent->>Airnode: POST getMatch
-    Airnode-->>Agent: 402 + PAYMENT-REQUIRED (price in aUSD and USDC)
-    Note over Agent: Keep only X402_ASSET, within<br/>X402_MAX_PAYMENT and X402_BUDGET
+    Airnode-->>Agent: 402 + PAYMENT-REQUIRED (price in aUSD)
+    Note over Agent: Pay only in aUSD, within<br/>X402_MAX_PAYMENT and X402_BUDGET
     Agent->>Agent: Sign EIP-3009 transferWithAuthorization
     Agent->>Airnode: POST getMatch + PAYMENT-SIGNATURE
     Airnode->>Fac: verify(payment)
@@ -322,19 +322,20 @@ One run of `pnpm demo --stake 0.002` on 2026-10-25.
 | 4   | Bob stakes 0.002 ETH on RED Canids Academy                           | Bob `0xbd7E…C764`         | 73,198    | [`0xd69f754c…eed894a7f`](https://sepolia.basescan.org/tx/0xd69f754ccb72eb25759d37d3e122147fcf632d386f7ab9755c00c8eeed894a7f) |
 | 5   | The agent settles with the signed result: RED.A won, fee 0.00006 ETH | Agent `0x4968…9B35`       | 175,350   | [`0x6ce3e580…f1ac146c6`](https://sepolia.basescan.org/tx/0x6ce3e5805567c6e059df471247d47f6d1fbf5b9f6f0a8c85240829637ac146c6) |
 | 6   | Bob claims 0.00594 ETH                                               | Bob                       | 64,262    | [`0xd7fa99a0…dd72cc38c`](https://sepolia.basescan.org/tx/0xd7fa99a010b84490f38d917475c59fadd72cc38c3487953c3275198f95acee2d) |
-| 7   | The agent pays 0.01 aUSD over x402 (`pnpm x402-check`)               | Facilitator `0xd407…f1bf` | 81,382    | [`0x0cdb6a74…161a2f5a`](https://sepolia.basescan.org/tx/0x0cdb6a746aa1e3c404d282e86fb18b41020ee188d6679699b2ed37da161a2f5a)  |
+| 7   | The agent pays 0.01 aUSD over x402 to a stand-in Airnode             | Facilitator `0xd407…f1bf` | 81,382    | [`0x0cdb6a74…161a2f5a`](https://sepolia.basescan.org/tx/0x0cdb6a746aa1e3c404d282e86fb18b41020ee188d6679699b2ed37da161a2f5a)  |
 
 - Between steps 4 and 5, the tamper test passed all five cases as `eth_call`s, which leave no transaction.
 - In step 7 the sender is the x402.org facilitator, not the agent: it submitted the agent's signed authorization and paid
-  the gas, and 0.01 aUSD moved from the agent to the deployer.
+  the gas, and 0.01 aUSD moved from the agent to the deployer. This ran before any Airnode charged, through a stand-in
+  that has since been removed; [market 4](#market-4-paying-the-real-airnode) pays the real Airnode.
 - Alice backed the loser, so she had nothing to claim. The pot was 0.006 ETH: 0.00006 ETH to the agent, 0.00594 ETH to
   Bob, who held all the winning stake.
 
 ### Markets 2 and 3: the agent buys its data over x402
 
-No AirnodeHub operation was priced yet, so `pnpm priced-airnode` stood in front of the real PandaScore Airnode and
-charged $0.01 per call. The agent ran against it with `PANDASCORE_AIRNODE_URL=http://127.0.0.1:4021/`. The signed results
-came from the real Airnode, so the contract checked the same signature as always.
+On 2026-10-25 no AirnodeHub operation was priced yet, so a local gateway (since removed) stood in front of the real
+PandaScore Airnode and charged $0.01 per call. The signed results came from the real Airnode, so the contract checked the
+same signature as always.
 
 | Check                    | Run                                | What happened                                                                                                | Agent's aUSD |
 | ------------------------ | ---------------------------------- | ------------------------------------------------------------------------------------------------------------ | ------------ |
@@ -358,6 +359,31 @@ came from the real Airnode, so the contract checked the same signature as always
 | 3      | The agent pays $0.01 for the result over x402 (retry) | Facilitator | [`0xab0d20a8…c7c0c71b`](https://sepolia.basescan.org/tx/0xab0d20a8ebbe1944da3e9ca9fd8d998eb4e04824797e930ea2df4530c7c0c71b)  |
 | 3      | The agent settles with the result it bought           | Agent       | [`0x67aba51b…409afe487`](https://sepolia.basescan.org/tx/0x67aba51bb100d55c83775016e4c6a3bfd4cffcd5e559f520604465c409afe487) |
 | 3      | Bob claims 0.00198 ETH                                | Bob         | [`0x908c1445…dd68a0a5a`](https://sepolia.basescan.org/tx/0x908c1445e79e5a11072ea3d656b0ba3dd68a0a5a4eb1668f0288343ed69b1590) |
+
+### Market 4: paying the real Airnode
+
+On 2026-10-29, after the PandaScore Airnode started charging $0.01 in aUSD per call, the same commands paid it directly.
+Each payment went from the agent to the Airnode's payee `0x1505…57A7`, submitted by the
+facilitator.
+
+| Step                                                | Command                      | From        | Transaction                                                                                                                 |
+| --------------------------------------------------- | ---------------------------- | ----------- | --------------------------------------------------------------------------------------------------------------------------- |
+| Pay $0.01 for match 1099552's details               | `pnpm create-market 1099552` | Facilitator | [`0x07f59ca3…d455fb22`](https://sepolia.basescan.org/tx/0x07f59ca37bb4c9a7da884677f4c96f70da6ecba498a70e215dfa2399d455fb22) |
+| Open market 4 on GRIN vs Meant 2 Be                 | `pnpm create-market 1099552` | Deployer    | [`0x362af6dd…74dad095`](https://sepolia.basescan.org/tx/0x362af6ddf330f1fe1ed8d7696f08ac3e71c38c8185c27f1c70d27d8f74dad095) |
+| Alice stakes 0.0004 ETH on GRIN Esports             | `pnpm stake 4 A 0.0004`      | Alice       | [`0x6ae988b6…0ac86e63`](https://sepolia.basescan.org/tx/0x6ae988b62cd71ad52d37eede0dea5d915176d2dc50d8ff19f8e5d8d20ac86e63) |
+| Bob stakes 0.0002 ETH on Meant 2 Be                 | `pnpm stake 4 B 0.0002`      | Bob         | [`0x0fe8414f…715e978b`](https://sepolia.basescan.org/tx/0x0fe8414f9685a386e8b8ddf032daa17b2c7ae8687929e180eb15834a715e978b) |
+| Pay $0.01 for the valid result                      | `pnpm tamper-test 4`         | Facilitator | [`0xeae468e2…bfbb99b5`](https://sepolia.basescan.org/tx/0xeae468e2437f016945e0c92f9e84898ba443d9d56314e37654385f35bfbb99b5) |
+| Pay $0.01 for a list of past matches                | `pnpm tamper-test 4`         | Facilitator | [`0x98134852…82f53923`](https://sepolia.basescan.org/tx/0x981348523cfddd889b0dab8a3f6dff6fdd785e65495db0cf45e2b5e882f53923) |
+| Pay $0.01 for another match's result                | `pnpm tamper-test 4`         | Facilitator | [`0xb58edfac…6c66689a`](https://sepolia.basescan.org/tx/0xb58edfac5fc64b7fe24084ec6d9d7d93f309a421daf3074910d253556c66689a) |
+| The agent pays $0.01 for the result                 | `pnpm agent --once`          | Facilitator | [`0x36e51fbf…25a005e0`](https://sepolia.basescan.org/tx/0x36e51fbfd0993f9e45c84ad4ff352591f7f990933afa60ada2b131d125a005e0) |
+| The agent settles: Meant 2 Be won, fee 0.000006 ETH | `pnpm agent --once`          | Agent       | [`0xc5611b6e…09e3f236`](https://sepolia.basescan.org/tx/0xc5611b6e0baae5fb1ab21acd033f50508ddad6592e50fb1213c097bb09e3f236) |
+| Bob claims 0.000594 ETH                             | `pnpm claim 4 --as bob`      | Bob         | [`0xa21e3d9b…ca3573c9`](https://sepolia.basescan.org/tx/0xa21e3d9bcc19f8ed76322c19edcd871ac186e07823bdcd8655dbf4d9ca3573c9) |
+
+- The tamper test passed all five cases. It pays for three calls: the valid result, a list of past matches to find
+  another match, and that match's result.
+- With `X402_MAX_PAYMENT=0.005`, and again with `X402_BUDGET=0.005`, the client refused the real Airnode's $0.01 price and
+  paid nothing.
+- The agent's aUSD went from $4.96 to $4.86 over the whole session, ten calls including a local `pnpm demo`.
 
 ### Setup
 
@@ -395,13 +421,13 @@ for the record; use the current address above.
 
 ### Accounts
 
-| Account            | Address                                                                                                                         | Role                                                                |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
-| Deployer           | [`0xcbC97747Dc24DC3A2565f479644155a8d181A448`](https://sepolia.basescan.org/address/0xcbC97747Dc24DC3A2565f479644155a8d181A448) | Deployed the market, opened the markets, received the x402 payments |
-| Alice              | [`0x21675bB470fcD8C12400E88F0Bd9520d5428ED89`](https://sepolia.basescan.org/address/0x21675bB470fcD8C12400E88F0Bd9520d5428ED89) | Staker                                                              |
-| Bob                | [`0xbd7E39101CCD5a83b2FD2954a8E14A16947Dc764`](https://sepolia.basescan.org/address/0xbd7E39101CCD5a83b2FD2954a8E14A16947Dc764) | Staker                                                              |
-| Keeper agent       | [`0x49685eF8ed97f3E428e82c0Df67Cb88691519B35`](https://sepolia.basescan.org/address/0x49685eF8ed97f3E428e82c0Df67Cb88691519B35) | Settled markets 1 to 3, paid over x402                              |
-| PandaScore Airnode | `0xd9D29FEDc3737aD5198611457fE04aB08a739C7b`                                                                                    | Signed the result. It never sends a transaction                     |
+| Account            | Address                                                                                                                         | Role                                                                    |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| Deployer           | [`0xcbC97747Dc24DC3A2565f479644155a8d181A448`](https://sepolia.basescan.org/address/0xcbC97747Dc24DC3A2565f479644155a8d181A448) | Deployed the market, opened the markets, received the stand-in payments |
+| Alice              | [`0x21675bB470fcD8C12400E88F0Bd9520d5428ED89`](https://sepolia.basescan.org/address/0x21675bB470fcD8C12400E88F0Bd9520d5428ED89) | Staker                                                                  |
+| Bob                | [`0xbd7E39101CCD5a83b2FD2954a8E14A16947Dc764`](https://sepolia.basescan.org/address/0xbd7E39101CCD5a83b2FD2954a8E14A16947Dc764) | Staker                                                                  |
+| Keeper agent       | [`0x49685eF8ed97f3E428e82c0Df67Cb88691519B35`](https://sepolia.basescan.org/address/0x49685eF8ed97f3E428e82c0Df67Cb88691519B35) | Settled markets 1 to 4, paid over x402                                  |
+| PandaScore Airnode | `0xd9D29FEDc3737aD5198611457fE04aB08a739C7b`                                                                                    | Signed the result. It never sends a transaction                         |
 
 ## Prerequisites
 
@@ -435,7 +461,7 @@ Check that everything works:
 
 ```sh
 forge test        # 88 contract tests: 18 for the market, 70 for the starter's libraries
-pnpm test         # 8 TypeScript tests
+pnpm test         # 9 TypeScript tests
 ```
 
 ## Configuration
@@ -446,21 +472,22 @@ Copy the example file and edit it if you need to:
 cp .env.example .env
 ```
 
-The example values work on a fresh local `anvil` chain as they are.
+The example values work on a fresh local `anvil` chain, except for one: every PandaScore call costs $0.01 in aUSD on
+Base Sepolia, whatever chain the market is on, and the example agent key holds none. Set `PAYER_PRIVATE_KEY` to a key
+that holds aUSD ([Paying over x402](#paying-over-x402) shows how to get some).
 
-| Variable                 | Used by                   | What it is                                                                                                    |
-| ------------------------ | ------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `RPC_URL`                | every script              | The chain to use. `http://127.0.0.1:8545` for anvil, `https://sepolia.base.org` for Base Sepolia              |
-| `PRIVATE_KEY`            | deploy, create-market     | Deploys the contract and opens markets. The default for every command without `--as`                          |
-| `ALICE_PRIVATE_KEY`      | `--as alice`, demo        | A staker                                                                                                      |
-| `BOB_PRIVATE_KEY`        | `--as bob`, demo          | A staker                                                                                                      |
-| `AGENT_PRIVATE_KEY`      | agent, `--as agent`, demo | The keeper agent. Earns settler fees and pays for priced Airnode calls                                        |
-| `MARKET_ADDRESS`         | every script              | The deployed `EsportsMarket`. The example is the first contract deployed on a fresh anvil                     |
-| `X402_ASSET`             | agent                     | The token the agent pays priced Airnode calls with: `aUSD` (default) or `USDC`                                |
-| `X402_MAX_PAYMENT`       | agent                     | The most the agent pays for one Airnode call, in dollars. Default `0.10`                                      |
-| `X402_BUDGET`            | agent                     | The most the agent pays for all calls in one run, in dollars. Default `1.00`                                  |
-| `PANDASCORE_AIRNODE_URL` | agent, scripts            | Where PandaScore calls go. Default the real Airnode. Set `http://127.0.0.1:4021/` for `pnpm priced-airnode`   |
-| `BASE_SEPOLIA_RPC_URL`   | payer                     | Base Sepolia RPC, where x402 payments happen, whatever chain `RPC_URL` is. Default `https://sepolia.base.org` |
+| Variable               | Used by                   | What it is                                                                                                    |
+| ---------------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `RPC_URL`              | every script              | The chain to use. `http://127.0.0.1:8545` for anvil, `https://sepolia.base.org` for Base Sepolia              |
+| `PRIVATE_KEY`          | deploy, create-market     | Deploys the contract and opens markets. The default for every command without `--as`                          |
+| `ALICE_PRIVATE_KEY`    | `--as alice`, demo        | A staker                                                                                                      |
+| `BOB_PRIVATE_KEY`      | `--as bob`, demo          | A staker                                                                                                      |
+| `AGENT_PRIVATE_KEY`    | agent, `--as agent`, demo | The keeper agent. Earns settler fees, and pays for Airnode calls unless `PAYER_PRIVATE_KEY` is set            |
+| `PAYER_PRIVATE_KEY`    | agent, scripts            | Pays for Airnode calls in aUSD on Base Sepolia. Optional; defaults to `AGENT_PRIVATE_KEY`                     |
+| `MARKET_ADDRESS`       | every script              | The deployed `EsportsMarket`. The example is the first contract deployed on a fresh anvil                     |
+| `X402_MAX_PAYMENT`     | agent, scripts            | The most to pay for one Airnode call, in dollars. Default `0.10`                                              |
+| `X402_BUDGET`          | agent, scripts            | The most to pay for all calls in one run, in dollars. Default `1.00`                                          |
+| `BASE_SEPOLIA_RPC_URL` | payer                     | Base Sepolia RPC, where x402 payments happen, whatever chain `RPC_URL` is. Default `https://sepolia.base.org` |
 
 `--as <name>` reads the key from `<NAME>_PRIVATE_KEY`, so you can add more people, such as `CAROL_PRIVATE_KEY` for
 `--as carol`.
@@ -480,14 +507,16 @@ In a second terminal, deploy and run the whole flow:
 
 ```sh
 cp .env.example .env
+# then set PAYER_PRIVATE_KEY in .env to a key that holds aUSD on Base Sepolia
 forge script script/DeployEsportsMarket.s.sol --rpc-url http://127.0.0.1:8545 --broadcast
 pnpm demo
 ```
 
-It takes about 30 seconds. The output looks like this:
+It takes about 40 seconds and pays for five Airnode calls, $0.05 in aUSD. The output looks like this:
 
 ```
 == 1. Pick a match that has finished and has a winner
+x402: paid $0.01 in aUSD (spent $0.01 of $1): https://sepolia.basescan.org/tx/0xf53eec18…
 Quarterfinal 1: BST.A vs RED.A (match 1200600), Counter-Strike, Gamers Club Liga Série A
 Team A: BESTIA Academy (135743)   Team B: RED Canids Academy (135505)
 
@@ -499,6 +528,9 @@ Market 1, request hash 0xec1bafc6…, staking closes 2026-10-20T20:38:00.000Z
 == 4. Wait for staking to close (30s)
 
 == 5. Tamper test: what the judges run
+x402: paid $0.01 in aUSD (spent $0.02 of $1): https://sepolia.basescan.org/tx/0xa3188537…
+x402: paid $0.01 in aUSD (spent $0.03 of $1): https://sepolia.basescan.org/tx/0xb4164656…
+x402: paid $0.01 in aUSD (spent $0.04 of $1): https://sepolia.basescan.org/tx/0x89c6fa4c…
 PASS  Valid result from the PandaScore Airnode         accepted
 PASS  One value edited (winner swapped)                rejected: NotSignedByAirnode(0xC21E…)
 PASS  Too old (checked 600s + 1s after signing)        rejected: ResponseTooOld(1792528681)
@@ -506,6 +538,7 @@ PASS  Answer to another request (match 1099552)        rejected: NotSignedByAirn
 PASS  Signed by a key that is not the Airnode          rejected: NotSignedByAirnode(0xeb9C…)
 
 == 6. The keeper agent buys the signed result and settles
+x402: paid $0.01 in aUSD (spent $0.05 of $1): https://sepolia.basescan.org/tx/0x162e423c…
 settled: team 135505 won, settler fee 0.03 ETH, signed result {"status":"finished","winnerId":135505,…}
 
 == 7. The winners claim
@@ -524,7 +557,7 @@ recently finished.
 | 1–2  | The market stores a request hash. That hash pins this match and these fields before any result exists.        |
 | 3    | Stakes sit in the contract. Nobody, including us, can move them except through `settle`, `claim` or a refund. |
 | 5    | The four tampered results fail with custom errors before anything moves. This is the hackathon's tamper test. |
-| 6    | The agent is untrusted. It is paid for delivering the result, and the contract checks the signature itself.   |
+| 6    | The agent bought the result for $0.01 over x402. It is untrusted: the contract checks the signature itself.   |
 | 7    | The payout follows the stakes: 3 ETH pot, 1% fee, Bob held all the winning stake, so he gets 2.97 ETH.        |
 
 To show a live market instead, open one on an upcoming match before the session (`pnpm find-matches upcoming` and
@@ -532,7 +565,9 @@ To show a live market instead, open one on an upcoming match before the session 
 
 ## Command reference
 
-Every command reads `.env`. Add `--as alice`, `--as bob` or `--as agent` to act as someone else.
+Every command reads `.env`. Add `--as alice`, `--as bob` or `--as agent` to act as someone else. The commands that
+call the Airnode (`find-matches`, `create-market`, `settle`, `tamper-test`, `fetch-result`, `agent` and `demo`) pay $0.01
+in aUSD per call from the payer key, and print each payment.
 
 | Command                                               | What it does                                                                                            |
 | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
@@ -547,8 +582,6 @@ Every command reads `.env`. Add `--as alice`, `--as bob` or `--as agent` to act 
 | `pnpm fetch-result <match id>`                        | Prints a match's signed result, as a contract receives it. Useful for saving test fixtures              |
 | `pnpm agent`                                          | Runs the keeper agent ([options](#the-keeper-agent))                                                    |
 | `pnpm demo [--stake <ETH>]`                           | Runs the whole flow. Bob stakes `--stake` ETH (default 1) and Alice twice that                          |
-| `pnpm priced-airnode [--price <dollars>]`             | Runs a local gateway that charges for PandaScore calls over x402, to rehearse the paid loop             |
-| `pnpm x402-check`                                     | Pays 0.01 in `X402_ASSET` through a real facilitator, to check payments before an Airnode charges       |
 
 `create-market` options:
 
@@ -591,7 +624,7 @@ On every check, for each open market whose staking has closed, the agent:
 1. Recomputes the result request hash from the market's match id, and skips the market if it does not match. Anyone can
    open a market, so the agent only works on ones it can verify.
 2. Voids the market if its deadline has passed.
-3. Fetches the signed result, paying over x402 if the Airnode asks for it.
+3. Fetches the signed result, paying $0.01 for it over x402.
 4. Verifies the signature and request off-chain, so a bad response never costs gas.
 5. If the match is over, simulates `settle`, sends it, and logs the fee it earned. If not, it waits `--recheck` seconds.
 
@@ -606,7 +639,7 @@ explained. The agent prints all three when it starts:
 ```
 [agent 17:00:24] watching 0x5FbDB2315678afecb367f032d93F642f64180aa3 as 0x90F79bf6EB2c4f870365E785982E1f101E93b906
 [agent 17:00:24] schedule: check every 60s, ask about an unfinished match again after 300s
-[agent 17:00:24] x402: pays in aUSD on Base Sepolia, at most $0.1 per call and $1 per run
+[agent 17:00:24] x402: pays in aUSD on Base Sepolia from 0x4968…9B35, at most $0.1 per call and $1 per run
 ```
 
 | What             | How                                                                                                                |
@@ -625,119 +658,72 @@ explained. The agent prints all three when it starts:
 [hackathon starter](https://github.com/api3dao/airnodehub-hackathon-starter/blob/main/src/x402.ts) does
 ([`src/x402.ts`](src/x402.ts)):
 
-1. The Airnode answers `402` with every asset it accepts in the `PAYMENT-REQUIRED` header.
-2. The agent keeps only the asset in `X402_ASSET`, within its per-call limit and remaining budget.
-3. It signs an EIP-3009 `transferWithAuthorization` from its own key and retries with it in `PAYMENT-SIGNATURE`.
+1. The Airnode answers `402` with the price in aUSD in the `PAYMENT-REQUIRED` header.
+2. The agent pays only in aUSD, and only within its per-call limit and remaining budget.
+3. It signs an EIP-3009 `transferWithAuthorization` from the payer key and retries with it in `PAYMENT-SIGNATURE`.
 4. The Airnode has an x402 facilitator settle the transfer, and returns the signed result with the settlement in
    `PAYMENT-RESPONSE`. The agent logs the amount, its running total and the Basescan link.
 
-Payments are in test dollars on Base Sepolia. An Airnode charges the same amount in either:
+Payments are in test dollars on Base Sepolia, and the Airnodes accept only AirnodeHub USD (aUSD). They stopped accepting
+testnet USDC on 2026-10-27.
 
 | Token                 | Address on Base Sepolia                      | Where to get it                                                                                     |
 | --------------------- | -------------------------------------------- | --------------------------------------------------------------------------------------------------- |
 | AirnodeHub USD (aUSD) | `0xbeA34973e5f67F18F656A2C6070C64326C791808` | [The aUSD faucet](https://api3dao.github.io/airnodehub-hackathon/faucet/), or `pnpm payer --mint 5` |
-| Testnet USDC          | `0x036CbD53842c5426634e7929541eC2318f3dCF7e` | [Circle's faucet](https://faucet.circle.com). Choose Base Sepolia                                   |
 
 - **The payment itself needs no ETH**: the facilitator submits the transfer and pays its gas. Minting aUSD from the
   faucet is a normal transaction, so that needs a little Base Sepolia ETH, from
   [Coinbase's faucet](https://portal.cdp.coinbase.com/products/faucet) or
   [Alchemy's](https://www.alchemy.com/faucets/base-sepolia).
-- **The faucet gives each account up to its limit in total**, 5 aUSD per account when this was written. aUSD has 6
-  decimals, so 1 aUSD is `1000000`.
-- **Payments are always on Base Sepolia**, even when the market runs on anvil or another chain, so the agent's key needs
-  the token on Base Sepolia.
+- **The faucet gives each account up to its limit in total**, 10 aUSD per account on 2026-10-29, which is 1,000 calls at
+  $0.01. aUSD has 6 decimals, so 1 aUSD is `1000000`.
+- **Payments are always on Base Sepolia**, even when the market runs on anvil or another chain, so the payer key needs
+  aUSD on Base Sepolia. That is `PAYER_PRIVATE_KEY` if set, or else `AGENT_PRIVATE_KEY`.
 - **Use your own key for payments.** The example `AGENT_PRIVATE_KEY` is a public anvil key, and anyone can spend what it
   holds on Base Sepolia.
 - **Call priced operations on the Airnode directly.** AirnodeHub's MCP server refuses them.
 
-`pnpm payer` shows the agent's ETH, USDC and aUSD on Base Sepolia and how much aUSD the faucet still gives it:
+`pnpm payer` shows the payer's ETH and aUSD on Base Sepolia and how much aUSD the faucet still gives it:
 
 ```
-x402 payer 0x90F79bf6EB2c4f870365E785982E1f101E93b906 on Base Sepolia
-  ETH   0.0000015   (only for minting from the faucet; x402 payments need none)
-  USDC  $0.016   (https://faucet.circle.com, choose Base Sepolia)
-  aUSD  $0   (https://api3dao.github.io/airnodehub-hackathon/faucet/)
-  The faucet gives this account $5 more aUSD (limit $5)
+x402 payer 0x49685eF8ed97f3E428e82c0Df67Cb88691519B35 on Base Sepolia
+  ETH   0.01018024379799788   (only for minting from the faucet; x402 payments need none)
+  aUSD  $4.86   (https://api3dao.github.io/airnodehub-hackathon/faucet/)
+  The faucet gives this account $5 more aUSD (limit $10)
 ```
 
-> **Status:** no AirnodeHub operation was priced when this was written (checked 2026-10-25 on the PandaScore, Nodary,
-> The Odds API, AeroDataBox and USGS Airnodes: none lists a payment), so against the real Airnode the agent's calls go
-> through unpaid. The payment path is tested end to end on Base Sepolia: behind `pnpm priced-airnode`, the agent refused
-> prices over its limits, paid $0.01 in aUSD through the `x402.org` facilitator, received the real Airnode's signed
-> result and settled markets with it, and was not charged when settlement failed. See
-> [Markets 2 and 3](#markets-2-and-3-the-agent-buys-its-data-over-x402). When an Airnode prices an operation, the agent pays
-> without any change.
+> **Status:** as of 2026-10-29 the PandaScore Airnode charges $0.01 in aUSD for `getMatch`, `matchesPast` and
+> `matchesUpcoming`, paid to `0x1505FD562AC2Fb4307B85BC6c672FfeafB4d57A7`. Reference data such as `listVideogames` is still free.
+> [Market 4](#market-4-paying-the-real-airnode) shows the agent paying it on Base Sepolia.
 
-### Rehearsing with a priced Airnode
+### Showing the spending limits
 
-`pnpm priced-airnode` is a local gateway in front of the real PandaScore Airnode that charges for every call, the way a
-priced Airnode does. Point the agent at it to run the whole paid loop before any AirnodeHub operation charges:
-
-```sh
-pnpm priced-airnode --price 0.01                                  # terminal 1
-PANDASCORE_AIRNODE_URL=http://127.0.0.1:4021/ pnpm agent --once   # terminal 2
-```
+Lower a limit below the $0.01 price and the client refuses to pay, so nothing moves and the call fails:
 
 ```
-[priced-airnode 17:52:03] payment from 0x4968…9B35 verified
-[priced-airnode 17:52:04] settled $0.01: https://sepolia.basescan.org/tx/0xf45bc523…
-[agent 17:52:04] paid $0.01 in aUSD (spent $0.01 of $1): https://sepolia.basescan.org/tx/0xf45bc523…
-[agent 17:52:05] market 2 (match 1200600): settled, team 135505 won, settler fee 0.00004 ETH, signed result {…}
+$ X402_MAX_PAYMENT=0.005 pnpm find-matches past 1
+Error: Failed to create payment payload: All payment requirements were rejected by spendControls.allowedAssets
+maxAmountPerPayment. …
 ```
 
-For each call it answers 402 with the price in aUSD and USDC. With a payment, it has the facilitator verify it, forwards
-the call to the PandaScore Airnode, has the facilitator settle the payment, and returns the Airnode's response with the
-settlement in `PAYMENT-RESPONSE`. Like an Airnode, it does not charge for a call that fails upstream. It signs nothing:
-the result is the real Airnode's, so the contract accepts it unchanged.
-
-| Option                | Default                        | What it does                           |
-| --------------------- | ------------------------------ | -------------------------------------- |
-| `--price <dollars>`   | 0.01                           | Price per call                         |
-| `--port <port>`       | 4021                           | Port on 127.0.0.1                      |
-| `--to <address>`      | the `PRIVATE_KEY` account      | Who receives the payments              |
-| `--facilitator <url>` | `https://x402.org/facilitator` | Which facilitator verifies and settles |
-
-To show the spending limits, run the agent with `X402_MAX_PAYMENT=0.005` or `X402_BUDGET=0.005`: it refuses to pay and
-leaves the market open.
-
-### Checking payments before an Airnode charges
-
-`pnpm x402-check` plays the Airnode's side of a priced call. It answers the agent's paying fetch with a 402, takes the
-payment the agent signs, and has a real facilitator verify and settle it, so the tokens move on Base Sepolia:
-
-```
-$ pnpm x402-check
-Paying $0.01 in aUSD from 0x4968…9B35 to 0xcbC9…A448
-Facilitator verify: valid
-Facilitator settle: settled
-Paid $0.01: https://sepolia.basescan.org/tx/0x0c49fea2…
-```
-
-| Option                | Default                        | What it does                              |
-| --------------------- | ------------------------------ | ----------------------------------------- |
-| `--amount <dollars>`  | 0.01                           | How much to pay                           |
-| `--to <address>`      | the `PRIVATE_KEY` account      | Who receives the payment                  |
-| `--facilitator <url>` | `https://x402.org/facilitator` | Which facilitator verifies and settles it |
-| `--as <name>`         | agent                          | Which key pays                            |
+`X402_BUDGET=0.005` does the same through the budget policy. Under either limit the agent logs the failure for that
+market, leaves the market open, and tries again on a later cycle.
 
 ### Showing x402 in the demo
 
 Before the session:
 
-1. Put your own key in `AGENT_PRIVATE_KEY`, and fund it with a little Base Sepolia ETH.
+1. Put your own key in `PAYER_PRIVATE_KEY` (or `AGENT_PRIVATE_KEY`), and fund it with a little Base Sepolia ETH.
 2. `pnpm payer --mint 5` to mint 5 aUSD, or use the [faucet page](https://api3dao.github.io/airnodehub-hackathon/faucet/)
-   with a browser wallet.
-3. `pnpm payer` to check the balance, and check whether PandaScore's `getMatch` is priced yet:
-   `curl -s https://airnode-pandascore.fly.dev/ | grep -o '"payment"'` prints nothing while it is free.
+   with a browser wallet. A demo run costs $0.05.
+3. `pnpm payer` to check the balance.
 
 On stage, when the agent runs:
 
 - Point at its startup lines: the schedule, the per-call limit and the budget.
-- If the operation is priced, the log shows `paid $0.01 in aUSD (spent $0.01 of $1)` with a Basescan link. Open it to
-  show the transfer that the facilitator settled.
-- If it is still free, say so: the call goes through without a 402, and the same code pays when the Airnode starts
-  charging. Then run the agent against `pnpm priced-airnode` and open the payment's Basescan link: the agent buying its data
-  and settling with it. `pnpm x402-check` alone shows a payment without a market.
+- Each call logs `paid $0.01 in aUSD (spent $0.01 of $1)` with a Basescan link. Open it to show the transfer that the
+  facilitator submitted: from the agent to the Airnode's payee, with the facilitator paying the gas.
+- To show the limits, run it once more with `X402_MAX_PAYMENT=0.005`: it refuses to pay, and the market stays open.
 
 Points to make:
 
@@ -750,7 +736,7 @@ Points to make:
 ## The tamper test
 
 The hackathon's judges send a market four bad results and one good one. `pnpm tamper-test <market id>` does the same
-against a deployed market, as `eth_call`s that change nothing:
+against a deployed market, as `eth_call`s that change nothing. It pays $0.03 for the three Airnode calls it makes:
 
 | Case                      | How it is made                                                   | Expected             |
 | ------------------------- | ---------------------------------------------------------------- | -------------------- |
@@ -855,7 +841,8 @@ PandaScore Airnode signed:
   Airnode, because the real Airnode has not signed such results for the saved matches.
 
 The TypeScript tests check that the request hash matches what the Airnode signed, that off-chain verification rejects
-edited and mismatched results, and that the x402 payer answers a simulated Airnode 402 with a valid EIP-3009 authorization in aUSD and stops at its per-call limit and budget.
+edited and mismatched results, and that the x402 payer answers a simulated Airnode 402 with a valid EIP-3009 authorization in aUSD, refuses any
+other asset, and stops at its per-call limit and budget.
 
 ### Fixtures
 
@@ -965,6 +952,8 @@ This is a hackathon demo. It has not been audited.
 | `Match … does not have both teams yet`                | PandaScore has not set the opponents. Pick another match                                         |
 | `The Airnode responded with 400`                      | The match id is wrong, or the match has no second opponent for the projection                    |
 | `The Airnode responded with 429` or `503`             | Rate limited. Wait and try again                                                                 |
+| `The Airnode asked for payment, and 0x… did not pay`  | The payer key has no aUSD on Base Sepolia. Run `pnpm payer --mint 5`, or set `PAYER_PRIVATE_KEY` |
+| `Failed to create payment payload`                    | The price is over `X402_MAX_PAYMENT` or what is left of `X402_BUDGET`. Raise them                |
 | `ERR_UNKNOWN_FILE_EXTENSION ".ts"`                    | Node is older than 22.18. Upgrade Node                                                           |
 | `packages field missing or empty` from pnpm           | Delete any `pnpm-workspace.yaml` you added; this project keeps pnpm settings in `.npmrc`         |
 | `Source "forge-std/…" not found`                      | Run `git submodule update --init --recursive`                                                    |
@@ -986,28 +975,26 @@ This is a hackathon demo. It has not been audited.
 
 ## Project layout
 
-| Path                                                                                                                                                                     | What it is                                                                          |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------- |
-| [`contracts/EsportsMarket.sol`](contracts/EsportsMarket.sol)                                                                                                             | The market                                                                          |
-| [`contracts/AirnodeV2Attestation.sol`](contracts/AirnodeV2Attestation.sol)                                                                                               | From the starter template: verifies an Airnode signature                            |
-| [`contracts/ProjectedJson.sol`](contracts/ProjectedJson.sol)                                                                                                             | From the starter template: reads fields of the signed JSON by name, and null checks |
-| [`contracts/IsoTimestamp.sol`](contracts/IsoTimestamp.sol)                                                                                                               | From the starter template: reads ISO 8601 dates for `ProjectedJson`                 |
-| [`test/AirnodeV2Attestation.t.sol`](test/AirnodeV2Attestation.t.sol), [`ProjectedJson.t.sol`](test/ProjectedJson.t.sol), [`IsoTimestamp.t.sol`](test/IsoTimestamp.t.sol) | From the starter template: tests for its libraries                                  |
-| [`script/DeployEsportsMarket.s.sol`](script/DeployEsportsMarket.s.sol)                                                                                                   | Deploys the market with the PandaScore Airnode's address                            |
-| [`test/EsportsMarket.t.sol`](test/EsportsMarket.t.sol)                                                                                                                   | Contract tests, including the tamper test                                           |
-| [`test/fixtures/`](test/fixtures)                                                                                                                                        | Real signed results                                                                 |
-| [`src/airnode-v2.ts`](src/airnode-v2.ts)                                                                                                                                 | From the starter template: request hashes, fetching and verifying signed responses  |
-| [`src/pandascore.ts`](src/pandascore.ts)                                                                                                                                 | The PandaScore Airnode's URL and address, the result request, and match listings    |
-| [`src/market.ts`](src/market.ts)                                                                                                                                         | Contract ABI, clients, and helpers shared by the scripts                            |
-| [`src/keeper.ts`](src/keeper.ts)                                                                                                                                         | Fetches a result and settles a market                                               |
-| [`src/agent.ts`](src/agent.ts)                                                                                                                                           | The keeper agent                                                                    |
-| [`src/x402.ts`](src/x402.ts)                                                                                                                                             | Pays for priced Airnode calls with the official `@x402/fetch` client, within limits |
-| [`src/payer.ts`](src/payer.ts)                                                                                                                                           | The x402 payer's balances on Base Sepolia, and minting aUSD from the faucet         |
-| [`src/priced-airnode.ts`](src/priced-airnode.ts)                                                                                                                         | A local gateway that charges for PandaScore calls over x402, for rehearsals         |
-| [`src/x402-check.ts`](src/x402-check.ts)                                                                                                                                 | Checks the agent's x402 payments with a real facilitator before an Airnode charges  |
-| [`src/tamper.ts`](src/tamper.ts)                                                                                                                                         | The tamper test against a deployed market                                           |
-| [`src/demo.ts`](src/demo.ts)                                                                                                                                             | The whole flow in one run                                                           |
-| `src/*.ts` (other files)                                                                                                                                                 | One file per command                                                                |
+| Path                                                                                                                                                                     | What it is                                                                           |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------ |
+| [`contracts/EsportsMarket.sol`](contracts/EsportsMarket.sol)                                                                                                             | The market                                                                           |
+| [`contracts/AirnodeV2Attestation.sol`](contracts/AirnodeV2Attestation.sol)                                                                                               | From the starter template: verifies an Airnode signature                             |
+| [`contracts/ProjectedJson.sol`](contracts/ProjectedJson.sol)                                                                                                             | From the starter template: reads fields of the signed JSON by name, and null checks  |
+| [`contracts/IsoTimestamp.sol`](contracts/IsoTimestamp.sol)                                                                                                               | From the starter template: reads ISO 8601 dates for `ProjectedJson`                  |
+| [`test/AirnodeV2Attestation.t.sol`](test/AirnodeV2Attestation.t.sol), [`ProjectedJson.t.sol`](test/ProjectedJson.t.sol), [`IsoTimestamp.t.sol`](test/IsoTimestamp.t.sol) | From the starter template: tests for its libraries                                   |
+| [`script/DeployEsportsMarket.s.sol`](script/DeployEsportsMarket.s.sol)                                                                                                   | Deploys the market with the PandaScore Airnode's address                             |
+| [`test/EsportsMarket.t.sol`](test/EsportsMarket.t.sol)                                                                                                                   | Contract tests, including the tamper test                                            |
+| [`test/fixtures/`](test/fixtures)                                                                                                                                        | Real signed results                                                                  |
+| [`src/airnode-v2.ts`](src/airnode-v2.ts)                                                                                                                                 | From the starter template: request hashes, fetching and verifying signed responses   |
+| [`src/pandascore.ts`](src/pandascore.ts)                                                                                                                                 | The PandaScore Airnode's URL and address, the result request, and match listings     |
+| [`src/market.ts`](src/market.ts)                                                                                                                                         | Contract ABI, clients, and helpers shared by the scripts                             |
+| [`src/keeper.ts`](src/keeper.ts)                                                                                                                                         | Fetches a result and settles a market                                                |
+| [`src/agent.ts`](src/agent.ts)                                                                                                                                           | The keeper agent                                                                     |
+| [`src/x402.ts`](src/x402.ts)                                                                                                                                             | Pays for Airnode calls in aUSD with the official `@x402/fetch` client, within limits |
+| [`src/payer.ts`](src/payer.ts)                                                                                                                                           | The x402 payer's balances on Base Sepolia, and minting aUSD from the faucet          |
+| [`src/tamper.ts`](src/tamper.ts)                                                                                                                                         | The tamper test against a deployed market                                            |
+| [`src/demo.ts`](src/demo.ts)                                                                                                                                             | The whole flow in one run                                                            |
+| `src/*.ts` (other files)                                                                                                                                                 | One file per command                                                                 |
 
 ## Credits and license
 

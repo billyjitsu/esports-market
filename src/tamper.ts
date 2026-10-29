@@ -15,9 +15,15 @@ interface TamperCase {
 
 // The tamper test from the hackathon brief, run against a deployed market without changing it: every case is an
 // eth_call of settle(). A valid result must go through, and the four tampered ones must revert before anything happens.
-export const runTamperTest = async (client: Client, address: Address, marketId: bigint) => {
+// The Airnode charges for each call, so fetchFunction pays for them, as createScriptFetch in x402.ts does.
+export const runTamperTest = async (
+  client: Client,
+  address: Address,
+  marketId: bigint,
+  fetchFunction: typeof fetch
+) => {
   const market = await readMarket(client, address, marketId);
-  const result = await fetchResult(market.matchId);
+  const result = await fetchResult(market.matchId, fetchFunction);
   const maxResponseAge = await client.readContract({ address, abi: marketAbi, functionName: 'MAX_RESPONSE_AGE' });
 
   // One value edited: the winner swapped to the other team
@@ -26,9 +32,9 @@ export const runTamperTest = async (client: Client, address: Address, marketId: 
   const editedData = JSON.stringify(data);
 
   // A real result for another match, with the same projection
-  const [otherMatch] = (await listMatches('past', 5)).filter(({ id }) => BigInt(id) !== market.matchId);
+  const [otherMatch] = (await listMatches('past', 5, fetchFunction)).filter(({ id }) => BigInt(id) !== market.matchId);
   if (!otherMatch) throw new Error('Found no other match to take a result from');
-  const otherResult = await fetchResult(otherMatch.id);
+  const otherResult = await fetchResult(otherMatch.id, fetchFunction);
 
   // The same result, signed the way an Airnode signs but with a key that is not the Airnode's
   const impostor = privateKeyToAccount(generatePrivateKey());

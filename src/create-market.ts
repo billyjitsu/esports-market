@@ -2,6 +2,7 @@ import { parseEventLogs } from 'viem';
 import { expectedRequestHash } from './keeper.ts';
 import { createClient, formatTime, marketAbi, positionalArguments, readMarketAddress, readOption } from './market.ts';
 import { getMatch } from './pandascore.ts';
+import { createScriptFetch } from './x402.ts';
 
 // Opens a market on a PandaScore match: pnpm create-market <match id> [--closes-in <seconds>] [--deadline-days <days>]
 // Staking closes when the match begins. --closes-in overrides that, which lets a demo open a market on a match that has
@@ -11,7 +12,8 @@ const matchId = BigInt(matchIdArgument ?? Number.NaN);
 const closesIn = readOption('--closes-in');
 const deadlineDays = Number(readOption('--deadline-days') ?? 7);
 
-const match = await getMatch(matchId);
+// Paid over x402
+const match = await getMatch(matchId, createScriptFetch());
 const [teamA, teamB] = match.teams;
 if (!teamA || !teamB) throw new Error(`Match ${matchId} does not have both teams yet`);
 

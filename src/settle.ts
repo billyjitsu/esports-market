@@ -1,13 +1,15 @@
 import { trySettle } from './keeper.ts';
 import { createClient, positionalArguments, readMarket, readMarketAddress } from './market.ts';
+import { createScriptFetch } from './x402.ts';
 
-// Fetches the signed result of a market's match and settles it: pnpm settle <market id> [--as agent]
+// Fetches the signed result of a market's match, paying for it over x402, and settles it:
+// pnpm settle <market id> [--as agent]
 const [marketIdArgument] = positionalArguments();
 if (!marketIdArgument) throw new Error('Usage: pnpm settle <market id> [--as agent]');
 
 const client = createClient();
 const address = readMarketAddress();
 const market = await readMarket(client, address, BigInt(marketIdArgument));
-const outcome = await trySettle(client, address, market);
+const outcome = await trySettle(client, address, market, createScriptFetch());
 console.log(`Market ${market.marketId}: ${outcome.kind}, ${outcome.detail}`);
 if ('transactionHash' in outcome) console.log(`  Transaction ${outcome.transactionHash}`);

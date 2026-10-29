@@ -1,4 +1,5 @@
-import { formatEther, parseEventLogs, parseUnits } from 'viem';
+import { formatEther, parseEventLogs } from 'viem';
+import { privateKeyToAccount } from 'viem/accounts';
 import { expectedRequestHash, trySettle } from './keeper.ts';
 import {
   createClient,
@@ -11,7 +12,7 @@ import {
   sleep,
 } from './market.ts';
 import { listMatches } from './pandascore.ts';
-import { createPayingFetch, formatDollars, isPaymentAsset, PAYMENT_ASSET_DECIMALS } from './x402.ts';
+import { createPayingFetch, formatDollars, readPayerPrivateKey, readSpendingLimits } from './x402.ts';
 
 // The keeper agent: it watches every market, buys the signed result of each match once staking has closed, and
 // settles the markets whose match is over. The settler fee is its pay, and nobody has to trust it, because the
@@ -21,30 +22,27 @@ import { createPayingFetch, formatDollars, isPaymentAsset, PAYMENT_ASSET_DECIMAL
 //   pnpm agent --once          check every market once and exit
 //   pnpm agent --open 3        first open markets on the next 3 upcoming matches
 //
-// Priced operations are paid over x402 from the agent's own key, in X402_ASSET, up to X402_MAX_PAYMENT dollars per
-// call and X402_BUDGET dollars per run.
+// Every Airnode call is paid over x402 in aUSD, from PAYER_PRIVATE_KEY if set or else the agent's own key, up to
+// X402_MAX_PAYMENT dollars per call and X402_BUDGET dollars per run.
 const once = process.argv.includes('--once');
 const intervalSeconds = Number(readOption('--interval') ?? 60);
 // A match that is not over yet is checked again only after this long, because every team shares the upstream quota
 const recheckSeconds = Number(readOption('--recheck') ?? 300);
 const marketsToOpen = Number(readOption('--open') ?? 0);
 
-const privateKey = readPrivateKey(readOption('--as') ?? 'agent');
-const client = createClient(privateKey);
+const role = readOption('--as') ?? 'agent';
+const client = createClient(readPrivateKey(role));
 const address = readMarketAddress();
 
-const paymentAsset = process.env.X402_ASSET ?? 'aUSD';
-if (!isPaymentAsset(paymentAsset)) throw new Error('X402_ASSET must be aUSD or USDC');
-const maxAmountPerCall = parseUnits(process.env.X402_MAX_PAYMENT ?? '0.10', PAYMENT_ASSET_DECIMALS);
-const budget = parseUnits(process.env.X402_BUDGET ?? '1.00', PAYMENT_ASSET_DECIMALS);
+const { maxAmountPerCall, budget } = readSpendingLimits();
+const payerPrivateKey = readPayerPrivateKey(role);
 const paying = createPayingFetch({
-  payerPrivateKey: privateKey,
-  asset: paymentAsset,
+  payerPrivateKey,
   maxAmountPerCall,
   budget,
   onPayment: ({ amount, spent, transaction }) =>
     log(
-      `paid ${formatDollars(amount)} in ${paymentAsset} (spent ${formatDollars(spent)} of ${formatDollars(budget)})` +
+      `paid ${formatDollars(amount)} in aUSD (spent ${formatDollars(spent)} of ${formatDollars(budget)})` +
         (transaction ? `: https://sepolia.basescan.org/tx/${transaction}` : '')
     ),
 });
@@ -54,7 +52,7 @@ const log = (message: string) => console.log(`[agent ${new Date().toISOString().
 // The market creator role: opens markets on upcoming matches that have both teams and no market yet
 const openMarkets = async (count: number) => {
   const openedMatchIds = new Set((await readAllMarkets(client, address)).map(({ matchId }) => matchId));
-  const candidates = (await listMatches('upcoming', 25)).filter(
+  const candidates = (await listMatches('upcoming', 25, paying.fetch)).filter(
     ({ id, teams, beginAt }) =>
       teams.length === 2 && beginAt && Date.parse(beginAt) > Date.now() + 60_000 && !openedMatchIds.has(BigInt(id))
   );
@@ -109,7 +107,7 @@ const checkMarkets = async () => {
 log(`watching ${address} as ${client.account.address}`);
 log(`schedule: check every ${intervalSeconds}s, ask about an unfinished match again after ${recheckSeconds}s`);
 log(
-  `x402: pays in ${paymentAsset} on Base Sepolia, at most ${formatDollars(maxAmountPerCall)} per call and ` +
+  `x402: pays in aUSD on Base Sepolia from ${privateKeyToAccount(payerPrivateKey).address}, at most ${formatDollars(maxAmountPerCall)} per call and ` +
     `${formatDollars(budget)} per run`
 );
 if (marketsToOpen > 0) await openMarkets(marketsToOpen);

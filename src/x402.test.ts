@@ -2,9 +2,12 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { type Address, recoverTypedDataAddress } from 'viem';
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
-import { BASE_SEPOLIA, createPayingFetch, PAYMENT_ASSET_ADDRESSES } from './x402.ts';
+import { AUSD_ADDRESS, BASE_SEPOLIA, createPayingFetch } from './x402.ts';
 
-// A 402 the way an Airnode sends one: every accepted asset, at the same price, in a base64 PAYMENT-REQUIRED header
+// Testnet USDC on Base Sepolia, which the Airnodes no longer accept
+const USDC_ADDRESS: Address = '0x036CbD53842c5426634e7929541eC2318f3dCF7e';
+
+// A 402 the way an Airnode sends one: the price in aUSD, in a base64 PAYMENT-REQUIRED header
 const requirement = (asset: Address, name: string, version: string) => ({
   scheme: 'exact',
   network: BASE_SEPOLIA,
@@ -14,19 +17,16 @@ const requirement = (asset: Address, name: string, version: string) => ({
   maxTimeoutSeconds: 300,
   extra: { name, version },
 });
-const paymentRequired = {
+const buildPaymentRequired = (accepts = [requirement(AUSD_ADDRESS, 'AirnodeHub USD', '1')]) => ({
   x402Version: 2,
   resource: { url: 'https://airnode.example/' },
-  accepts: [
-    requirement(PAYMENT_ASSET_ADDRESSES.USDC, 'USDC', '2'),
-    requirement(PAYMENT_ASSET_ADDRESSES.aUSD, 'AirnodeHub USD', '1'),
-  ],
-};
+  accepts,
+});
 const encode = (value: unknown) => Buffer.from(JSON.stringify(value)).toString('base64');
 const decode = (value: string) => JSON.parse(Buffer.from(value, 'base64').toString('utf8'));
 
 // Answers the first call with 402, and a paid call with a signed response and a settlement
-const createFakeAirnode = () => {
+const createFakeAirnode = (paymentRequired = buildPaymentRequired()) => {
   const paymentHeaders: (string | null)[] = [];
   const fakeAirnode: typeof fetch = async (input, init) => {
     const paymentHeader =
@@ -57,7 +57,6 @@ test('pays a 402 in aUSD with a signed EIP-3009 authorization, and counts it aga
   const paying = createPayingFetch(
     {
       payerPrivateKey,
-      asset: 'aUSD',
       maxAmountPerCall: 100_000n,
       budget: 1_000_000n,
       onPayment: ({ amount }) => payments.push(amount),
@@ -73,10 +72,10 @@ test('pays a 402 in aUSD with a signed EIP-3009 authorization, and counts it aga
   const paymentHeader = paymentHeaders.at(-1);
   assert.ok(paymentHeader);
   const payment = decode(paymentHeader);
-  assert.equal(payment.accepted.asset, PAYMENT_ASSET_ADDRESSES.aUSD);
+  assert.equal(payment.accepted.asset, AUSD_ADDRESS);
   const { authorization, signature } = payment.payload;
   const signer = await recoverTypedDataAddress({
-    domain: { name: 'AirnodeHub USD', version: '1', chainId: 84532, verifyingContract: PAYMENT_ASSET_ADDRESSES.aUSD },
+    domain: { name: 'AirnodeHub USD', version: '1', chainId: 84532, verifyingContract: AUSD_ADDRESS },
     types: {
       TransferWithAuthorization: [
         { name: 'from', type: 'address' },
@@ -104,7 +103,7 @@ test('pays a 402 in aUSD with a signed EIP-3009 authorization, and counts it aga
 test('refuses to pay past the budget', async () => {
   const { fakeAirnode } = createFakeAirnode();
   const paying = createPayingFetch(
-    { payerPrivateKey: generatePrivateKey(), asset: 'aUSD', maxAmountPerCall: 100_000n, budget: 15_000n },
+    { payerPrivateKey: generatePrivateKey(), maxAmountPerCall: 100_000n, budget: 15_000n },
     fakeAirnode
   );
   await paying.fetch('https://airnode.example/', { method: 'POST', body: '{}' });
@@ -115,7 +114,17 @@ test('refuses to pay past the budget', async () => {
 test('refuses a call that costs more than the per-call limit', async () => {
   const { fakeAirnode } = createFakeAirnode();
   const paying = createPayingFetch(
-    { payerPrivateKey: generatePrivateKey(), asset: 'aUSD', maxAmountPerCall: 5_000n, budget: 1_000_000n },
+    { payerPrivateKey: generatePrivateKey(), maxAmountPerCall: 5_000n, budget: 1_000_000n },
+    fakeAirnode
+  );
+  await assert.rejects(paying.fetch('https://airnode.example/', { method: 'POST', body: '{}' }));
+  assert.equal(paying.spent(), 0n);
+});
+
+test('refuses to pay in an asset other than aUSD', async () => {
+  const { fakeAirnode } = createFakeAirnode(buildPaymentRequired([requirement(USDC_ADDRESS, 'USDC', '2')]));
+  const paying = createPayingFetch(
+    { payerPrivateKey: generatePrivateKey(), maxAmountPerCall: 100_000n, budget: 1_000_000n },
     fakeAirnode
   );
   await assert.rejects(paying.fetch('https://airnode.example/', { method: 'POST', body: '{}' }));
@@ -124,7 +133,7 @@ test('refuses a call that costs more than the per-call limit', async () => {
 
 test('passes through a call that needs no payment', async () => {
   const paying = createPayingFetch(
-    { payerPrivateKey: generatePrivateKey(), asset: 'USDC', maxAmountPerCall: 0n, budget: 0n },
+    { payerPrivateKey: generatePrivateKey(), maxAmountPerCall: 0n, budget: 0n },
     async () => new Response('ok', { status: 200 })
   );
   assert.equal((await paying.fetch('https://airnode.example/')).status, 200);

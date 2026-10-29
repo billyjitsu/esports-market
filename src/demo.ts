@@ -12,10 +12,12 @@ import {
 } from './market.ts';
 import { listMatches } from './pandascore.ts';
 import { runTamperTest } from './tamper.ts';
+import { createScriptFetch } from './x402.ts';
 
 // The whole flow in one run, for rehearsing or presenting on a local chain:
 // open a market on a match that just finished, two people stake, staking closes, the tamper test runs, the keeper
-// agent settles with the signed result, and the winner claims.
+// agent settles with the signed result, and the winner claims. The Airnode calls are paid over x402 from the payer key
+// (PAYER_PRIVATE_KEY, or else the agent's), which needs aUSD on Base Sepolia even when the market is on anvil.
 const closesInSeconds = 20;
 // Bob stakes this much ETH and Alice twice as much. Use a small amount on a testnet: pnpm demo --stake 0.002
 const stake = parseEther(readOption('--stake') ?? '1');
@@ -28,9 +30,12 @@ const address = readMarketAddress();
 if (!(await creator.getCode({ address }))) throw new Error(`No contract at ${address}. Deploy it first (see README).`);
 
 const step = (text: string) => console.log(`\n== ${text}`);
+const airnodeFetch = createScriptFetch(console.log);
 
 step('1. Pick a match that has finished and has a winner');
-const match = (await listMatches('past', 10)).find(({ teams, winnerId }) => teams.length === 2 && winnerId);
+const match = (await listMatches('past', 10, airnodeFetch)).find(
+  ({ teams, winnerId }) => teams.length === 2 && winnerId
+);
 const [teamA, teamB] = match?.teams ?? [];
 if (!match || !teamA || !teamB) throw new Error('Found no finished match with a winner');
 console.log(`${match.name} (match ${match.id}), ${match.videogame}, ${match.league}`);
@@ -87,11 +92,11 @@ while (Date.now() / 1000 <= Number(closesAt) + clockMarginSeconds) await sleep(1
 await creator.request({ method: 'evm_mine' as never, params: [] as never }).catch(() => undefined);
 
 step('5. Tamper test: what the judges run');
-await runTamperTest(agent, address, marketId);
+await runTamperTest(agent, address, marketId, airnodeFetch);
 
 step('6. The keeper agent buys the signed result and settles');
 const agentBalanceBefore = await agent.getBalance({ address: agent.account.address });
-const outcome = await trySettle(agent, address, await readMarket(agent, address, marketId));
+const outcome = await trySettle(agent, address, await readMarket(agent, address, marketId), airnodeFetch);
 console.log(`${outcome.kind}: ${outcome.detail}`);
 
 step('7. The winners claim');

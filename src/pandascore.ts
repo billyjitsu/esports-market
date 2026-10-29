@@ -1,11 +1,7 @@
 import type { Address } from 'viem';
 import type { AirnodeV2Request } from './airnode-v2.ts';
 
-export const PANDASCORE_AIRNODE_DIRECT_URL = 'https://airnode-pandascore.fly.dev/';
-
-// Where calls go. PANDASCORE_AIRNODE_URL can point at `pnpm priced-airnode` to rehearse paying over x402. The signer
-// check below does not change, so whatever answers must pass on the real Airnode's signed responses.
-export const PANDASCORE_AIRNODE_URL = process.env.PANDASCORE_AIRNODE_URL ?? PANDASCORE_AIRNODE_DIRECT_URL;
+export const PANDASCORE_AIRNODE_URL = 'https://airnode-pandascore.fly.dev/';
 
 // The address that the PandaScore Airnode signs with, from the x-airnode extension of the document at its URL.
 export const PANDASCORE_AIRNODE_ADDRESS: Address = '0xd9D29FEDc3737aD5198611457fE04aB08a739C7b';
@@ -61,9 +57,14 @@ const summarize = (match: PandaScoreMatch): MatchSummary => ({
 
 // Reads match details for people and agents to choose from. Nothing here goes on-chain, so the signature that comes
 // with these responses is not checked. All teams share the upstream quota, so keep `perPage` small and cache results.
-// The Airnode sends `data` as the text that it signed, PandaScore's JSON body here, so it is parsed before use.
-const callUnsigned = async (operation: string, parameters: Record<string, unknown>): Promise<unknown> => {
-  const response = await fetch(PANDASCORE_AIRNODE_URL, {
+// The Airnode sends `data` as the text that it signed, PandaScore's JSON body here, so it is parsed before use. These
+// operations are priced, so pass a paying fetch, such as createScriptFetch from x402.ts.
+const callUnsigned = async (
+  operation: string,
+  parameters: Record<string, unknown>,
+  fetchFunction: typeof fetch
+): Promise<unknown> => {
+  const response = await fetchFunction(PANDASCORE_AIRNODE_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ operation, parameters }),
@@ -72,11 +73,15 @@ const callUnsigned = async (operation: string, parameters: Record<string, unknow
   return JSON.parse(((await response.json()) as { data: string }).data);
 };
 
-export const listMatches = async (when: 'upcoming' | 'past' | 'running', perPage = 10): Promise<MatchSummary[]> => {
+export const listMatches = async (
+  when: 'upcoming' | 'past' | 'running',
+  perPage: number,
+  fetchFunction: typeof fetch
+): Promise<MatchSummary[]> => {
   const operation = { upcoming: 'matchesUpcoming', past: 'matchesPast', running: 'matchesRunning' }[when];
-  const matches = (await callUnsigned(operation, { per_page: perPage })) as PandaScoreMatch[];
+  const matches = (await callUnsigned(operation, { per_page: perPage }, fetchFunction)) as PandaScoreMatch[];
   return matches.map(summarize);
 };
 
-export const getMatch = async (matchId: number | bigint): Promise<MatchSummary> =>
-  summarize((await callUnsigned('getMatch', { match_id_or_slug: String(matchId) })) as PandaScoreMatch);
+export const getMatch = async (matchId: number | bigint, fetchFunction: typeof fetch): Promise<MatchSummary> =>
+  summarize((await callUnsigned('getMatch', { match_id_or_slug: String(matchId) }, fetchFunction)) as PandaScoreMatch);
